@@ -11,7 +11,7 @@ setup(
     url='https://github.com/cajal/bl3d',
     keywords= '2p 3d GCaMPs soma segmentation',
     packages=['bl3d'],
-    install_requires=['torch', 'datajoint', 'numpy', 'scipy'],
+    install_requires=['torch', 'datajoint', 'numpy', 'scipy', 'scikit-image'],
     classifiers=[
         'Development Status :: 3 - Alpha',
         'Intended Audience :: Science/Research',
