@@ -2,20 +2,10 @@
 import datajoint as dj
 import itertools
 
+from bl3d import utils
+
 
 schema = dj.schema('ecobost_bl3d', locals())
-
-
-def list_hash(items):
-    """ Compute the MD5 digest hash for a list."""
-    import hashlib
-
-    hashed = hashlib.md5()
-    for item in items:
-        hashed.update(str(item).encode())
-
-    return hashed.hexdigest()
-
 
 @schema
 class TrainingParams(dj.Lookup):
@@ -39,7 +29,7 @@ class TrainingParams(dj.Lookup):
         [0.95],                             # lr_decay
         ['val_loss']                        # lr_schedule: could be 'none', every 'epoch' or epochs when 'val_loss' does not decrease
     )
-    contents = [[list_hash(item), *item] for item in items]
+    contents = [[utils.list_hash(item), *item] for item in items]
 
 
 @schema
@@ -101,7 +91,7 @@ class ModelParams(dj.Lookup):
     def fill():
         for model in [Linear, Dictionary, FCN]:
             for item in model.items:
-                model_hash = model.hash_prefix + '_' + list_hash(item)
+                model_hash = model.hash_prefix + '_' + utils.list_hash(item)
                 ModelParams.insert1({'model_hash': model_hash}, skip_duplicates=True)
                 model.insert1([model_hash, *item], skip_duplicates=True)
 
@@ -109,11 +99,7 @@ class ModelParams(dj.Lookup):
         """ Construct model with the required configuration. """
         raise NotImplementedError
 
-class Filter(dj.Lookup):
 
-
-#TODO: Add different filters
-#TODO: Get good range of num_voxels for nucleus or soma.
 class EvalParams(dj.Lookup):
     definition=""" # different parameters used during evaluation
     eval_hash:              varchar(64)     # unique id for evaluation parameters
@@ -127,10 +113,10 @@ class EvalParams(dj.Lookup):
     """
 
     items = itertools.product(
-        [-1, 1],                            # gaussian_std
+        [0, 0.7],                           # gaussian_std
         [False, True],                      # use_grad_image
         [26],                               # num_thresholds
         [34, 113, 268],                     # min_voxels: sphere volume for d in [4, 6, 8]
         [1437, 2144, 3054, 1e9],            # max_voxels: sphere volume fo r d in [14, 16, 18, infty]
     )
-    contents = [[list_hash(item), *item] for item in items]
+    contents = [[utils.list_hash(item), *item] for item in items]
