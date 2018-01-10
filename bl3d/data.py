@@ -33,18 +33,19 @@ class PreprocessingParams(dj.Lookup):
 
     -> stack.CorrectedStack
     ---
+    bbox:               tinyblob # bbox (min_z, max_z, min_y, max_y, min_x, max_x) to crop
     gaussian_std:       float    # stddev of the smoothing filter
     threshold:          float    # threshold for the red label
     min_distance:       int      # minimum distance between local maxima in the volume
     min_voxels:         int      # masks with less voxels than this are discarded
     max_voxels:         int      # masks with more voxels than this are discarded
     """
-    contents = [ # animal_id, session, stack_idx, pipe_version, volume_id, gaussian_std, ...
-        [17206, 3, 1, 1, 1, 0.6, 1.5, 5, 113, 4189],
-        [17206, 3, 2, 1, 1, 0.6, 1.5, 5, 113, 4189], # some edge and top effects, some two-cells joined
-        [17206, 3, 7, 1, 1, 0.6, 1.5, 5, 113, 4189],
-        [17026, 20, 1, 1, 1, 0.6, 1.5, 5, 113, 4189],  # some unwanted cells on the sides, plenty of two-cells joined
-        [17026, 20, 2, 1, 1, 0.6, 1.5, 5, 113, 4189],  # seems alright
+    contents = [ # animal_id, session, stack_idx, pipe_version, volume_id, bbox, gaussian_std, ...
+        [17206, 3, 1, 1, 1, (15, -1, 15, -7, 15, -8), 0.6, 1.3, 5, 113, 4189],
+        [17206, 3, 2, 1, 1, (0, -1, 15, -5, 15, -2), 0.6, 1.3, 5, 113, 4189],
+        [17206, 3, 7, 1, 1, (0, -1, 21, -5, 11, -4), 0.6, 1.3, 5, 113, 4189],
+        [17026, 20, 1, 1, 1, (0, -1, 2, -5, 5, -2), 0.6, 1.4, 5, 113, 4189],
+        [17026, 20, 2, 1, 1, (0, -1, 1, -3, 5, -2), 0.6, 1.4, 5, 113, 4189],
     ]
 
 @schema
@@ -99,29 +100,29 @@ class Stack(dj.Computed):
 
         print('Creating example', example_id, 'from', key)
 
-        # Get microns per pixel resolution
+        # Get resolution (microns per pixel)
         dims = (stack.CorrectedStack() & key).fetch1()
         um_per_px = (dims['um_depth'] / dims['px_depth'], dims['um_height'] / dims['px_height'],
                      dims['um_width'] / dims['px_width'])
 
+        # Get preprocessing params
+        params = (PreprocessingParams() & key).fetch1()
+        bbox = (slice(params['bbox'][0], params['bbox'][1]),
+                slice(params['bbox'][2], params['bbox'][3]),
+                slice(params['bbox'][4], params['bbox'][5]))
 
-        # Process green channel: resize to 1 x 1 x 1 mm^3 voxels
+        # Resize green channel to 1 x 1 x 1 mm^3 voxels and trim black edges
         green = get_stack(key, channel=1)
-        volume = ndimage.zoom(green, um_per_px, order=1, output=np.float32)
+        volume = ndimage.zoom(green, um_per_px, order=1, output=np.float32)[bbox]
         self.Volume().insert1({'example_id': example_id, 'volume': volume})
 
-        # Process red channel: resize, normalize contrast locally and smooth a little to denoise
-        params = (PreprocessingParams() & key).fetch1()
+        # Resize, crop, normalize contrast (locally) and smooth red channel
         red = get_stack(key, channel=2)
-        resized = ndimage.zoom(red, um_per_px, order=1)
-
-        mean = ndimage.uniform_filter(resized, (3, 25, 25))
-        stddev = np.sqrt(ndimage.uniform_filter((resized - mean) ** 2, (3, 25, 25)))
+        resized = ndimage.zoom(red, um_per_px, order=1)[bbox]
+        mean = ndimage.uniform_filter(resized, (3, 30, 30))
+        stddev = np.sqrt(ndimage.uniform_filter(resized ** 2, (3, 30, 30)) -
+                         ndimage.uniform_filter(resized, (3, 30, 30)) ** 2)
         enhanced = ndimage.gaussian_filter((resized - mean) / stddev, params['gaussian_std'])
-
-
-#        background = ndimage.gaussian_filter(resized, (3, 20, 20))
-#        enhanced = ndimage.gaussian_filter(resized / background, params['gaussian_std'])
 
         # Get masks (watershed segmentation from local maxima)
         np.random.seed(123)
