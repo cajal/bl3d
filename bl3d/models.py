@@ -9,18 +9,22 @@ def init_conv(modules):
         nn.init.kaiming_normal(module.weight)
         nn.init.constant(module.bias, 0)
 
+def arr2int(array):
+    """ From array of numpy integers to list of Python ints."""
+    return [int(x) for x in array]
+
 
 class LinearFilter(nn.Module):
-    """ A single 31 x 31 learnable filter.
+    """ A single learnable 3-d filter.
 
     Arguments:
-        in_channels: Number of channels in the input volume.
-        out_channels: Number of channels of the required output. Usually the number of
-            classes.
+        num_features: Tuple. Number of channels in the input and output volumes.
+        filter_size: Filter size sent to Conv3d.
     """
-    def __init__(self, in_channels=1, out_channels=2):
+    def __init__(self, num_features=(1, 2), filter_size=(25, 19, 19)):
         super().__init__()
-        self.filter = nn.Conv3d(in_channels, out_channels, (25, 19, 19), padding=(12, 9, 9))
+        self.filter = nn.Conv3d(int(num_features[0]), int(num_features[1]),
+                                arr2int(filter_size), padding=arr2int(filter_size / 2))
 
     def forward(self, input_):
         output = self.filter(input_)
@@ -31,23 +35,22 @@ class LinearFilter(nn.Module):
 
 
 class Dictionary(nn.Module):
-    """ A two-layer convnet with 16 3-d filters learned in the first layer and a fully
-        connected layer in top of it.
+    """ A two-layer convnet with 3-d filters learned in the first layer and a fully
+        connected layer on top of it.
 
     Arguments:
-        in_channels: Number of channels in the input volume.
-        out_channels: Number of channels of the required output. Usually the number of
-            classes.
-
-    Effective filter size: 25 x 18 x 18
+        num_features: Triple. Number of features per layer (input, hidden and output layer).
+        filter_size: Filter size sent to Conv3d.
     """
-    def __init__(self, in_channels=1, out_channels=2):
+    def __init__(self, num_features=(1, 16, 2), filter_size=(25, 19, 19), use_batchnorm=False):
         super().__init__()
-        self.conv = nn.Conv3d(in_channels, 16, (25, 19, 19), padding=(12, 9, 9))
-        self.fc = nn.Conv3d(16, out_channels, 1)
+        self.conv = nn.Conv3d(int(num_features[0]), int(num_features[1]),
+                                  arr2int(filter_size), padding=arr2int(filter_size / 2))
+        self.bn = nn.BatchNorm3d(int(num_features[1])) if use_batchnorm else nn.Sequential() # bn or no-op
+        self.fc = nn.Conv3d(int(num_features[1]), int(num_features[2]), 1)
 
     def forward(self, input_):
-        h1 = F.relu(self.conv(input_))
+        h1 = self.bn(F.relu(self.conv(input_)))
         output = self.fc(h1)
         return output
 
@@ -56,33 +59,32 @@ class Dictionary(nn.Module):
 
 
 class FullyConvNet(nn.Module):
-    """ A 7 layer convnet.
+    """ A fully convolutional network.
 
-    Effective filter size: 19 x 19 x 19
+    Default params have 7 layers and an effective receptive field of 19 x 19.
     """
-    def __init__(self, in_channels=1, out_channels=2):
+    def __init__(self, num_features=(1, 8, 8, 16, 16, 32, 32, 2), kernel_sizes=(3, 3, 3, 3, 3, 1, 1),
+                 dilation=(1, 1, 2, 2, 3, 1, 1), padding=(1, 1, 2, 2, 3, 0, 0), use_batchnorm=False):
         super().__init__()
-        self.conv1 = nn.Conv3d(in_channels, 8, 3, padding=1) # Change this to 5
-        self.conv2 = nn.Conv3d(8, 8, 3, padding=1)
-        self.conv3 = nn.Conv3d(8, 16, 3, padding=2, dilation=2)
-        self.conv4 = nn.Conv3d(16, 16, 3, padding=2, dilation=2)
-        self.conv5 = nn.Conv3d(16, 32, 3, padding=3, dilation=3)
-        self.fc1 = nn.Conv3d(32, 32, 1)
-        self.fc2 = nn.Conv3d(32, out_channels, 1)
+
+        modules = []
+        for i in range(len(num_features) - 2): # each conv layer
+            modules.append(nn.Conv3d(int(num_features[i]), int(num_features[i + 1]),
+                                     int(kernel_sizes[i]), dilation=int(dilation[i]),
+                                     padding=int(padding[i])))
+            modules.append(nn.ReLU())
+            if use_batchnorm:
+                modules.append(nn.BatchNorm3d(int(num_features[i])))
+        modules.append(nn.Conv3d(int(num_features[-2]), int(num_features[-1]),
+                                 int(kernel_sizes[-1]), dilation=int(dilation[-1]),
+                                 padding=int(padding[-1]))) # last fc layer
+        self.fcn = nn.Sequential(*modules)
 
     def forward(self, input_):
-        h1 = F.relu(self.conv1(input_))
-        h2 = F.relu(self.conv2(h1))
-        h3 = F.relu(self.conv3(h2))
-        h4 = F.relu(self.conv4(h3))
-        h5 = F.relu(self.conv5(h4))
-        h6 = self.fc1(h5)
-        output = self.fc2(h6)
+        output = self.fcn(input_)
         return output
 
     def init_params(self):
-        init_conv([module for module in self.modules if isinstance(module, nn.Conv3d)])
+        init_conv([module for module in self.fcn if isinstance(module, nn.Conv3d)])
 
-
-#class FullyConvNet_plus_BN(nn.Module):
-#    #TODO: CONV-> RELU-> BN
+#TODO: Mask R-CNN (https://arxiv.org/abs/1703.06870)

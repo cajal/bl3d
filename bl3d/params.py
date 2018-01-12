@@ -3,9 +3,11 @@ import datajoint as dj
 import itertools
 
 from bl3d import utils
+from bl3d import models
 
 
 schema = dj.schema('ecobost_bl3d', locals())
+
 
 @schema
 class TrainingParams(dj.Lookup):
@@ -35,7 +37,7 @@ class TrainingParams(dj.Lookup):
 @schema
 class ModelParams(dj.Lookup):
     definition = """ # different models to train
-    model_hash:             varchar(16)     # unique id for network configurations
+    model_hash:             varchar(64)     # unique id for network configurations
     """
     class Linear(dj.Part):
         definition = """ # single 3-d linear filter (plus softmax)
@@ -55,7 +57,7 @@ class ModelParams(dj.Lookup):
         -> master
         ---
         filter_size:        tinyblob        # size of the filters
-        num_features:       int             # number of feature maps per layer
+        num_features:       tinyblob        # number of feature maps per layer
         use_batchnorm:      boolean         # whether to use batch normalization
         """
         hash_prefix = 'dict'
@@ -69,27 +71,20 @@ class ModelParams(dj.Lookup):
         definition = """ # a fully convolutional network for segmentation
         -> master
         ---
-        num_conv_layers:    tinyint         # number of convolutional networks
-        num_fc_layers:      tinyint         # number of fully connected networks (after conv)
         num_features:       tinyblob        # number of feature maps per layer
         kernel_sizes:       tinyblob        # list with kernel sizes (one per conv layer)
         dilation:           tinyblob        # list with dilation (one per conv layer)
         padding:            tinyblob        # list with padding amounts (one per conv layer)
-        use_batchnorm:      boolean         # whether to use batch_normalization
+        use_batchnorm:      boolean         # whether to use batch normalization
         """
         hash_prefix = 'fcn'
-        items = itertools.product(
-            [5],                            # num_conv_layers
-            [2],                            # num_fc_layers
-            [(1, 8, 8, 16, 16, 32, 32, 2)], # num_features
-            [(3, 3, 3, 3, 3)],              # kernel_sizes
-            [(1, 1, 2, 2, 3)],              # dilation
-            [(1, 1, 2, 2, 3)],              # padding
-            [False]                         # use_batchnorm
-        )
+        items = [# num_features, kernel_sizes, dilation, padding, use_batchnorm
+            [(1, 8, 8, 16, 16, 32, 32, 2), (3, 3, 3, 3, 3, 1, 1), (1, 1, 2, 2, 3, 1, 1),
+             (1, 1, 2, 2, 3, 0, 0), False]
+        ]
 
     def fill():
-        for model in [Linear, Dictionary, FCN]:
+        for model in [ModelParams.Linear, ModelParams.Dictionary, ModelParams.FCN]:
             for item in model.items:
                 model_hash = model.hash_prefix + '_' + utils.list_hash(item)
                 ModelParams.insert1({'model_hash': model_hash}, skip_duplicates=True)
@@ -97,25 +92,37 @@ class ModelParams(dj.Lookup):
 
     def build_model(key):
         """ Construct model with the required configuration. """
-        raise NotImplementedError
+        if ModelParams.Linear() & key:
+            params = (ModelParams.Linear() & key).fetch1('num_features', 'filter_size')
+            return models.LinearFilter(*params)
+        elif ModelParams.Dictionary() & key:
+            params = (ModelParams.Dictionary() & key).fetch1('num_features', 'filter_size',
+                                                             'use_batchnorm')
+            return models.Dictionary(*params)
+        elif ModelParams.FCN() & key:
+            params = (ModelParams.FCN() & key).fetch1('num_features', 'kernel_sizes',
+                                                      'dilation', 'padding', 'use_batchnorm')
+            return models.FullyConvNet(*params)
+        else:
+            raise ValueError('Model key {} not found.'.format(key))
 
 
-class EvalParams(dj.Lookup):
+@schema
+class CrossValParams(dj.Lookup):
     definition=""" # different parameters used during evaluation
-    eval_hash:              varchar(64)     # unique id for evaluation parameters
+    xval_hash:              varchar(64)     # unique id for evaluation parameters
     ---
-    gaussian_std:           float           # standard deviation of gaussian window used for smoothing
-    use_gradimage:          boolean         # whether to use the gradient of the predictions
-    integrate_probs:        boolean         # whether to
     num_thresholds:         tinyint         # number of (linspaced) thresholds to try
+    gaussian_std:           float           # standard deviation of gaussian window used for smoothing
+    min_distance:           int             # minimum distance between local maxima in the volume
     min_voxels:             int             # minimum number of voxels for a mask to be valid
     max_voxels:             int             # maximum number of voxels for a mask to be valid
     """
 
     items = itertools.product(
-        [0, 0.7],                           # gaussian_std
-        [False, True],                      # use_grad_image
         [26],                               # num_thresholds
+        [0, 0.6],                           # gaussian_std
+        [4, 5, 6],                          # min_distance
         [34, 113, 268],                     # min_voxels: sphere volume for d in [4, 6, 8]
         [1437, 2144, 3054, 1e9],            # max_voxels: sphere volume fo r d in [14, 16, 18, infty]
     )
