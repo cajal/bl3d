@@ -55,9 +55,9 @@ class Split(dj.Lookup):
         num_examples = len(example_ids)
         for example_id in example_ids:  # each example
             contents.append([example_id, num_examples, example_ids - set([example_id]), [example_id]])
-        for animal_id in set(data.Stack().fetch('animal_id')): # each animal
-            val_examples = (data.Stack() & {'animal_id': animal_id}).fetch('example_id')
-            contents.append([animal_id, num_examples, example_ids - set(val_examples), val_examples])
+#        for animal_id in set(data.Stack().fetch('animal_id')): # each animal
+#            val_examples = (data.Stack() & {'animal_id': animal_id}).fetch('example_id')
+#            contents.append([animal_id, num_examples, example_ids - set(val_examples), val_examples])
         return contents
 
 

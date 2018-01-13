@@ -26,7 +26,7 @@ class TrainingParams(dj.Lookup):
         [1e-4, 1e-3, 1e-2, 1e-1],           # learning_rate
         [0, 1e-5, 1e-3, 1e-1, 1e1],         # weight decay
         [1234],                             # seed
-        [150],                              # num_epochs
+        [100],                              # num_epochs
         [0.9],                              # momentum
         [0.95],                             # lr_decay
         ['val_loss']                        # lr_schedule: could be 'none', every 'epoch' or epochs when 'val_loss' does not decrease
