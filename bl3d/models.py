@@ -10,8 +10,8 @@ def init_conv(modules):
         nn.init.constant(module.bias, 0)
 
 def arr2int(array):
-    """ From array of numpy integers to list of Python ints."""
-    return [int(x) for x in array]
+    """ From array of numpy integers to tuple of Python ints."""
+    return tuple(int(x) for x in array)
 
 
 class LinearFilter(nn.Module):
@@ -30,7 +30,7 @@ class LinearFilter(nn.Module):
         output = self.filter(input_)
         return output
 
-    def init_params(self):
+    def init_parameters(self):
         init_conv([self.filter])
 
 
@@ -54,7 +54,7 @@ class Dictionary(nn.Module):
         output = self.fc(h1)
         return output
 
-    def init_params(self):
+    def init_parameters(self):
         init_conv([self.conv, self.fc])
 
 
@@ -84,7 +84,7 @@ class FullyConvNet(nn.Module):
         output = self.fcn(input_)
         return output
 
-    def init_params(self):
+    def init_parameters(self):
         init_conv([module for module in self.fcn if isinstance(module, nn.Conv3d)])
 
 #TODO: Mask R-CNN (https://arxiv.org/abs/1703.06870)
