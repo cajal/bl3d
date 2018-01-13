@@ -68,3 +68,17 @@ class ContrastNorm:
         volume = ((example[0] - example[0].mean(axis=(-1, -2, -3))) /
                   example[0].std(axis=(-1, -2, -3)))
         return (volume, example[1])
+
+class Copy:
+    """ Creates a copy of the example.
+
+    See: https://discuss.pytorch.org/t/torch-from-numpy-not-support-negative-strides/3663
+    """
+    def __call__(self, example):
+        """ Apply transform.
+
+        Arguments:
+        example: (volume, label) tuple. A 4-d and 3-d numpy array: channels x depth x
+            height x width and depth x height x width. Does NOT work in tensors.
+        """
+        return tuple(x.copy() for x in example)
