@@ -50,6 +50,8 @@ class SegmentationMetrics(dj.Computed):
         """
 
     def make(self, key):
+        print('Evaluating', key)
+
         # Get model
         net = (train.TrainedModel() & key).load_model()
 
@@ -104,6 +106,8 @@ class SegmentationMetrics(dj.Computed):
             specificities.append(metrics[4])
             ious.append(metrics[0])
             f1s.append(metrics[1])
+
+            print('IOU:', metrics[0])
 
         # Insert
         best_iou = max(ious)
