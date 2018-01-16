@@ -32,7 +32,7 @@ class SegmentationMetrics(dj.Computed):
     best_iou:               float
     best_f1:                float
     """
-    class ThresholdSelection():
+    class ThresholdSelection(dj.Part):
         definition= """ # all thresholds tried
         -> master
         ---
