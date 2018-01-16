@@ -53,7 +53,7 @@ class SegmentationMetrics(dj.Computed):
         print('Evaluating', key)
 
         # Get model
-        net = (train.TrainedModel() & key).load_model()
+        net = train.TrainedModel.load_model(key)
 
         # Move model to GPU
         net.cuda()
