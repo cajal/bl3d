@@ -38,6 +38,10 @@ def compute_loss(net, dataloader, criterion):
 
     return loss
 
+def mysql_float(number):
+    """ Clean a float to be inserted in MySQL."""
+    return -1 if np.isnan(number) else 1e10 if np.isinf(number) else number
+
 
 @schema
 class Split(dj.Lookup):
@@ -124,7 +128,7 @@ class TrainedModel(dj.Computed):
         lr_history = []
 
         best_model = net
-        best_val_loss = float('inf')
+        best_val_loss = 1e10 # float('inf')
         best_epoch = 0
         for epoch in range(1, train_params['num_epochs'] + 1):
             log('Epoch {}:'.format(epoch))
@@ -162,10 +166,10 @@ class TrainedModel(dj.Computed):
                     results['best_model'] = {k: v.cpu().numpy() for k, v in best_model.state_dict().items()}
                     results['best_epoch'] = best_epoch
                     results['best_val_loss'] = best_val_loss
-                    results['best_train_loss'] = compute_loss(best_model, dataloaders['train'], criterion)
+                    results['best_train_loss'] = mysql_float(compute_loss(best_model, dataloaders['train'], criterion))
                     results['final_model'] = {k: v.cpu().numpy() for k, v in net.state_dict().items()}
-                    results['final_val_loss'] = compute_loss(net, dataloaders['val'], criterion)
-                    results['final_train_loss'] = compute_loss(net, dataloaders['train'], criterion)
+                    results['final_val_loss'] = mysql_float(compute_loss(net, dataloaders['val'], criterion))
+                    results['final_train_loss'] = mysql_float(compute_loss(net, dataloaders['train'], criterion))
                     self.insert1(results)
                     return -1
 
