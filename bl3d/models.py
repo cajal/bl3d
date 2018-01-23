@@ -50,7 +50,7 @@ class Dictionary(nn.Module):
         self.fc = nn.Conv3d(int(num_features[1]), int(num_features[2]), 1)
 
     def forward(self, input_):
-        h1 = self.bn(F.relu(self.conv(input_)))
+        h1 = self.bn(F.relu(self.conv(input_), inplace=True))
         output = self.fc(h1)
         return output
 
@@ -72,7 +72,7 @@ class FullyConvNet(nn.Module):
             modules.append(nn.Conv3d(int(num_features[i]), int(num_features[i + 1]),
                                      int(kernel_sizes[i]), dilation=int(dilation[i]),
                                      padding=int(padding[i])))
-            modules.append(nn.ReLU())
+            modules.append(nn.ReLU(inplace=True))
             if use_batchnorm:
                 modules.append(nn.BatchNorm3d(int(num_features[i])))
         modules.append(nn.Conv3d(int(num_features[-2]), int(num_features[-1]),
