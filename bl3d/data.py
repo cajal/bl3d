@@ -160,3 +160,37 @@ class Stack(dj.Computed):
                 'height': bbox[4] - bbox[1], 'width': bbox[5] - bbox[2],
                 'mean_red': mask.mean_intensity, 'mean_green': green_box[mask.image].mean()
             })
+
+
+@schema
+class AverageCell(dj.Computed):
+    definition = """ # mean image of the cells
+    -> Stack
+    ---
+    volume:             longblob            # 31 x 31 x 31 mean image in the green channel
+    label:              longblob            # 31 x 31 x 31 mean image in the red channel
+    """
+    def make(self, key):
+        print('Populating key', key)
+
+        # Get data
+        volume = (Stack.Volume() & key).fetch1('volume')
+        label = (Stack.Label() & key).fetch1('label')
+        zs, ys, xs = (Stack.MaskProperties() & key).fetch('z_centroid', 'y_centroid', 'x_centroid')
+        zs, ys, xs = zs.round().astype(int), ys.round().astype(int), xs.round().astype(int)
+
+        # Create mean images
+        green = np.zeros((31, 31, 31))
+        red = np.zeros((31, 31, 31))
+        num_cells_in_range = 0
+        for z, y, x in zip(zs, ys, xs):
+            if (z - 15 >= 0 and z + 15 < volume.shape[0] and y - 15 >= 0 and
+                y + 15 < volume.shape[1] and x - 15 >= 0 and x + 15 < volume.shape[2]):
+                green += volume[z - 15:z + 15 + 1, y - 15:y + 15 + 1, x - 15:x + 15 + 1]
+                red += label[z - 15:z + 15 + 1, y - 15:y + 15 + 1, x - 15:x + 15 + 1]
+                num_cells_in_range += 1
+        green /= num_cells_in_range
+        red /= num_cells_in_range
+
+        # Insert
+        self.insert1({**key, 'volume': green, 'label': red})
