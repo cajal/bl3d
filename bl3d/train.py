@@ -103,7 +103,7 @@ class TrainedModel(dj.Computed):
         train_transform = Compose([transforms.RandomCrop(), transforms.RandomRotate(),
                                    transforms.RandomHorizontalFlip(), transforms.ContrastNorm(),
                                    transforms.Copy()])
-        val_transform = Compose([transforms.RandomCrop((225, 512, 512)), transforms.ContrastNorm()])
+        val_transform = Compose([transforms.RandomCrop((224, 512, 512)), transforms.ContrastNorm()])
         dsets = {'train': datasets.SegmentationDataset(train_examples, train_transform),
                  'val': datasets.SegmentationDataset(val_examples, val_transform)}
         dataloaders = {k: DataLoader(dset, shuffle=True, num_workers=4) for k, dset in dsets.items()}
@@ -176,6 +176,9 @@ class TrainedModel(dj.Computed):
                 # Backprop
                 loss.backward()
                 optimizer.step()
+
+                # Delete variables to free memory
+                del volume, label, output, vectorized, loss
 
             # Record validation loss
             val_loss_ = compute_loss(net, dataloaders['val'], criterion)
