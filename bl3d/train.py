@@ -31,7 +31,7 @@ def compute_loss(net, dataloader, criterion):
         with torch.no_grad():
             volume, label = Variable(volume.cuda()), Variable(label.cuda())
             output = net(volume) # 1 x num_classes x d x h x w
-            loss += criterion(output.view(output.shape[1], -1).t(), label.view(-1)).data[0]
+            loss += criterion(output.view(output.shape[1], -1).t(), label.view(-1)).item()
     loss /= len(dataloader)
 
     net.train()
@@ -150,7 +150,7 @@ class TrainedModel(dj.Computed):
                 loss = criterion(vectorized, label.view(-1))
 
                 # Record training loss
-                loss_ = loss.data[0] # float
+                loss_ = loss.item() # float
                 log('Training loss:', loss_)
                 train_loss.append(loss_)
 
