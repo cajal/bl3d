@@ -28,10 +28,10 @@ def compute_loss(net, dataloader, criterion):
 
     loss = 0
     for volume, label in dataloader:
-        volume = Variable(volume.cuda(), volatile=True)
-        label = Variable(label.cuda(), volatile=True)
-        output = net(volume) # 1 x num_classes x d x h x w
-        loss += criterion(output.view(output.shape[1], -1).t(), label.view(-1)).data[0]
+        with torch.no_grad():
+            volume, label = Variable(volume.cuda()), Variable(label.cuda())
+            output = net(volume) # 1 x num_classes x d x h x w
+            loss += criterion(output.view(output.shape[1], -1).t(), label.view(-1)).data[0]
     loss /= len(dataloader)
 
     net.train()
