@@ -34,3 +34,15 @@ def colorize_label(label):
     rgb = color.label2rgb(label, bg_label=0)
 
     return rgb
+
+def memusage():
+    """ Report all Tensor objects in memory and its size. """
+    # Source: https://discuss.pytorch.org/t/how-to-debug-causes-of-gpu-memory-leaks/6741/3
+    import torch, gc
+
+    for obj in gc.get_objects():
+        try:
+            if torch.is_tensor(obj) or torch.is_tensor(obj.data):
+                print(type(obj), obj.shape)
+        except:
+            pass # other non-tensor objects
