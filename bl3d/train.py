@@ -100,13 +100,13 @@ class TrainedModel(dj.Computed):
 
         # Get datasets
         train_examples, val_examples = (Split() & key).fetch1('train_examples', 'val_examples')
-        train_transform = Compose([transforms.RandomCrop(), transforms.RandomRotate(),
+        train_transform = Compose([transforms.RandomCrop(224), transforms.RandomRotate(),
                                    transforms.RandomHorizontalFlip(), transforms.ContrastNorm(),
                                    transforms.Copy()])
-        val_transform = Compose([transforms.RandomCrop((224, 512, 512)), transforms.ContrastNorm()])
+        val_transform = Compose([transforms.RandomCrop((224, 384, 384)), transforms.ContrastNorm()])
         dsets = {'train': datasets.SegmentationDataset(train_examples, train_transform),
                  'val': datasets.SegmentationDataset(val_examples, val_transform)}
-        dataloaders = {k: DataLoader(dset, shuffle=True, num_workers=4) for k, dset in dsets.items()}
+        dataloaders = {k: DataLoader(dset, shuffle=True, num_workers=2) for k, dset in dsets.items()}
 
         # Get model
         net = params.ModelParams.build_model(key)
@@ -177,7 +177,7 @@ class TrainedModel(dj.Computed):
                 loss.backward()
                 optimizer.step()
 
-                # Delete variables to free memory
+                # Delete variables to free memory (only minimal gain)
                 del volume, label, output, vectorized, loss
 
             # Record validation loss
