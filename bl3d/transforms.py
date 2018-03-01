@@ -1,8 +1,6 @@
 """ Some simple 3-D transforms. """
 import numpy as np
 
-# TODO: Copy array before outputting transforms?
-
 class RandomCrop:
     """ Randomly crop a 3-d patch from a volume.
 
