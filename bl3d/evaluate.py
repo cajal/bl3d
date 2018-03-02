@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import datajoint as dj
 import numpy as np
+import torch
 
 from torch.utils.data import DataLoader
 from torch.autograd import Variable
@@ -82,9 +83,10 @@ class SegmentationMetrics(dj.Computed):
             confusion_matrix = np.zeros(4) # tp, fp, tn, fn
             for image, label in dataloader:
 
-                # Compute prediction (heatmap of probabilities)
-                output = net(Variable(image.cuda(), volatile=True))
-                prediction = F.softmax(output, dim=1) # 1 x num_classes x depth x height x width
+                with torch.no_grad():
+                    # Compute prediction (heatmap of probabilities)
+                    output = net(Variable(image.cuda()))
+                    prediction = F.softmax(output, dim=1) # 1 x num_classes x depth x height x width
 
                 # Threshold prediction to create segmentation
                 segmentation = prediction[0, 1].data.cpu().numpy() > threshold
