@@ -11,14 +11,14 @@ RUN apt-get update && \
 
 # Install Python 3
 RUN apt-get update && \
-    apt-get install -y python3-dev python3-pip && \
+    apt-get install -y python3-dev python3-pip python3-tk && \
     pip3 install numpy scipy matplotlib ipython
 
 # Install pytorch 
 #RUN pip3 install http://download.pytorch.org/whl/cu90/torch-0.3.1-cp35-cp35m-linux_x86_64.whl && \
 #    pip3 install torchvision
 
-# Install pytorch (from source)
+# Install pytorch (from source, takes ~1h)
 RUN pip3 install numpy pyyaml mkl setuptools cmake cffi typing && \
     apt-get install -y git && \
     pip3 install git+https://github.com/pytorch/pytorch && \
