@@ -153,10 +153,12 @@ def forward_on_big_input(net, volume, max_size=256, padding=32, out_channels=2):
         msg = ('padding and max_size should be a single integer or a sequence of the '
                'same length as the number of spatial dimensions in the volume.')
         raise ValueError(msg)
+    if np.any(2 * np.array(padding) >= np.array(max_size)):
+        raise ValueError('Padding needs to be smaller than half max_size.')
 
     # Evaluate input chunk by chunk
     output = torch.zeros(volume.shape[0], out_channels, *volume.shape[2:])
-    for initial_coords in itertools.product(*[range(p, d, s - p) for p, d, s in
+    for initial_coords in itertools.product(*[range(p, d, s - 2 * p) for p, d, s in
                                               zip(padding, volume.shape[2:], max_size)]):
         # Cut chunk (it starts at coord - padding)
         cut_slices = [slice(c - p, c - p + s) for c, p, s in zip(initial_coords, padding, max_size)]
