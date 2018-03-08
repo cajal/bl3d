@@ -85,7 +85,7 @@ class SegmentationMetrics(dj.Computed):
 
                 with torch.no_grad():
                     # Compute prediction (heatmap of probabilities)
-                    output = net(Variable(image.cuda()))
+                    output = forward_on_big_input(net, Variable(image.cuda()))
                     prediction = F.softmax(output, dim=1) # 1 x num_classes x depth x height x width
 
                 # Threshold prediction to create segmentation
@@ -118,11 +118,59 @@ class SegmentationMetrics(dj.Computed):
         self.insert1({**key, 'best_threshold': best_threshold, 'best_iou': best_iou,
                       'best_f1': best_f1})
 
-        self.ThresholdSelection().insert1({**key, 'thresholds': thresholds, 'tps': tps,
-                                           'fps': fps, 'tns': tns, 'fns':fns,
-                                           'accuracies': accuracies, 'precisions': precisions,
-                                           'recalls': recalls, 'specificities': specificities,
-                                           'ious': ious, 'f1s': f1s})
+        threshold_metrics = {**key, 'thresholds': thresholds, 'tps': tps, 'fps': fps,
+                             'tns': tns, 'fns':fns, 'accuracies': accuracies,
+                             'precisions': precisions, 'recalls': recalls,
+                             'specificities': specificities, 'ious': ious, 'f1s': f1s}
+        self.ThresholdSelection().insert1(threshold_metrics)
+
+
+def forward_on_big_input(net, volume, max_size=256, padding=32, out_channels=2):
+    """ Passes a big volume through a network dividing it in chunks.
+
+    Arguments:
+    net: A pytorch network.
+    volume: The input to the network (num_examples x num_channels x d1 x d2 x d3 x ...).
+    max_size: An int or tuple of ints. Maximum input size for every volume dimension.
+    pad_amount: An int or tuple of ints. Amount of padding performed by the network. We
+        discard an edge of this size out of chunks in the middle of the FOV to avoid
+        padding effects. Better to overestimate.
+    out_channels: Number of channels in the output.
+
+    Note:
+        Assumes net and volume are in the same device (usually both in GPU).
+    """
+    import itertools
+
+    # Get some params
+    spatial_dims = volume.dim() - 2 # number of dimensions after batch and channel
+
+    # Basic checks
+    listify = lambda x: [x] * spatial_dims if np.isscalar(x) else list(x)
+    padding = [int(round(x)) for x in listify(padding)]
+    max_size = [int(round(x)) for x in listify(max_size)]
+    if len(padding) != spatial_dims or len(max_size) != spatial_dims:
+        msg = ('padding and max_size should be a single integer or a sequence of the '
+               'same length as the number of spatial dimensions in the volume.')
+        raise ValueError(msg)
+
+    # Evaluate input chunk by chunk
+    output = torch.zeros(volume.shape[0], out_channels, *volume.shape[2:])
+    for initial_coords in itertools.product(*[range(p, d, s - p) for p, d, s in
+                                              zip(padding, volume.shape[2:], max_size)]):
+        # Cut chunk (it starts at coord - padding)
+        cut_slices = [slice(c - p, c - p + s) for c, p, s in zip(initial_coords, padding, max_size)]
+        chunk = volume[(..., *cut_slices)]
+
+        # Forward
+        out = net(chunk)
+
+        # Assign to output dropping padded amount (special treat for first chunk)
+        output_slices = [slice(0 if sl.start == 0 else c, sl.stop) for c, sl in zip(initial_coords, cut_slices)]
+        out_slices = [slice(0 if sl.start == 0 else p, None) for p, sl in zip(padding, cut_slices)]
+        output[(..., *output_slices)] = out[(..., *out_slices)]
+
+    return output
 
 
 def compute_confusion_matrix(segmentation, label):
