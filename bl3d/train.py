@@ -106,7 +106,7 @@ class TrainedModel(dj.Computed):
         val_transform = Compose([transforms.RandomCrop((224, 384, 384)), transforms.ContrastNorm()])
         dsets = {'train': datasets.SegmentationDataset(train_examples, train_transform),
                  'val': datasets.SegmentationDataset(val_examples, val_transform)}
-        dataloaders = {k: DataLoader(dset, shuffle=True, num_workers=2) for k, dset in dsets.items()}
+        dataloaders = {k: DataLoader(dset, shuffle=True, num_workers=2, pin_memory=True) for k, dset in dsets.items()}
 
         # Get model
         net = params.ModelParams.build_model(key)
