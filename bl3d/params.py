@@ -80,7 +80,9 @@ class ModelParams(dj.Lookup):
         hash_prefix = 'fcn'
         items = [# num_features, kernel_sizes, dilation, padding, use_batchnorm
             [(1, 8, 8, 16, 16, 32, 32, 2), (3, 3, 3, 3, 3, 1, 1), (1, 1, 2, 2, 3, 1, 1),
-             (1, 1, 2, 2, 3, 0, 0), False]
+             (1, 1, 2, 2, 3, 0, 0), False],
+            [(1, 8, 8, 16, 16, 32, 32, 2), (3, 3, 3, 3, 3, 1, 1), (1, 1, 2, 2, 3, 1, 1),
+             (1, 1, 2, 2, 3, 0, 0), True]
         ]
 
     def fill():
