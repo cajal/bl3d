@@ -69,12 +69,13 @@ class FullyConvNet(nn.Module):
 
         modules = []
         for i in range(len(num_features) - 2): # each conv layer
+
             modules.append(nn.Conv3d(int(num_features[i]), int(num_features[i + 1]),
                                      int(kernel_sizes[i]), dilation=int(dilation[i]),
                                      padding=int(padding[i])))
             modules.append(nn.ReLU(inplace=True))
             if use_batchnorm:
-                modules.append(nn.BatchNorm3d(int(num_features[i])))
+                modules.append(nn.BatchNorm3d(int(num_features[i + 1])))
         modules.append(nn.Conv3d(int(num_features[-2]), int(num_features[-1]),
                                  int(kernel_sizes[-1]), dilation=int(dilation[-1]),
                                  padding=int(padding[-1]))) # last fc layer
