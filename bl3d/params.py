@@ -29,7 +29,7 @@ class TrainingParams(dj.Lookup):
         [100],                              # num_epochs
         [0.9],                              # momentum
         [0.95],                             # lr_decay
-        ['val_loss']                        # lr_schedule: could be 'none', every 'epoch' or epochs when 'val_loss' does not decrease
+        ['val_loss', 'none']                # lr_schedule: could be 'none', every 'epoch' or epochs when 'val_loss' does not decrease
     )
     contents = [[utils.list_hash(item), *item] for item in items]
 
