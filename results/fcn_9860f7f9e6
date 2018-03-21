@@ -224,6 +224,10 @@ best_iou (mean) 0.0655048125
 | 0.1        | 0.067    | 0.103 | 0.405 | 0.284 |
 | 10         | 0.066    | 0.066 | 0.065 | 0.066 |
 
+Conclusion:
+0.1 lr or up
+1e-4 lambda (between 1e-5 and 1e-3)
+
 
 ###############################################################################
 # Training set
@@ -417,3 +421,45 @@ best_iou (mean) 0.065353875
 | 0.1        | 0.067    | 0.1   | 0.389 | 0.285 |
 | 10         | 0.065    | 0.065 | 0.065 | 0.066 |
 
+
+################################################################################
+# No learning rate schedule
+################################################################################
+# VAL results
+For lr 0.01 and 0.01, 3 out of the 8 val loss functions seem to have higher losses.
+For lr 0.1, the val loss even decreases initially goes up again and decreases again. It seems a bit more noisy , too
+I could use 0.1 which gives best and then decrease lr for the second 100 epochs (so it converges finally into local maxima)
+Higher lambdas cause divergence.
+
+
+## Average best val loss (less is better)
+| Lambda/LR  | 0.0001   | 0.001 | 0.01  | 0.1   |
+| 0          | 0.38     | 0.247 | 0.193 | 0.132 |     
+| 0.00001    | 0.379    | 0.247 | 0.193 | 0.131 |
+| 0.001      | 0.38     | 0.247 | 0.19  | 0.127 | 
+| 0.1        | 0.389    | 0.259 | 0.19  | 0.257 |
+| 10         | 0.656    | 0.652 | 0.653 | 0.656 |
+
+## Average best epoch
+| Lambda/LR  | 0.0001   | 0.001 | 0.01  | 0.1   |
+| 0          | 99       | 92    | 76    | 96    |     
+| 0.00001    | 99       | 92    | 76    | 98    |
+| 0.001      | 99       | 92    | 86    | 90    | 
+| 0.1        | 99       | 100   | 80    | 13    |
+| 10         | 82       | 2     | 1     | 36    |
+
+# Average best threshold
+| Lambda/LR  | 0.0001   | 0.001 | 0.01  | 0.1   |
+| 0          | 0.22     | 0.09  | 0.14  | 0.36  |     
+| 0.00001    | 0.22     | 0.09  | 0.14  | 0.34  |
+| 0.001      | 0.22     | 0.09  | 0.14  | 0.29  | 
+| 0.1        | 0.25     | 0.14  | 0.31  | 0     |
+| 10         | 0        | 0     | 0     | 0     |
+
+# Average best IOU
+| Lambda/LR  | 0.0001   | 0.001 | 0.01  | 0.1   |
+| 0          | 0.07     | 0.111 | 0.291 | 0.446 |
+| 0.00001    | 0.07     | 0.111 | 0.291 | 0.443 |
+| 0.001      | 0.07     | 0.111 | 0.301 | 0.454 | 
+| 0.1        | 0.07     | 0.124 | 0.37  | 0.066 |
+| 10         | 0.066    | 0.066 | 0.066 | 0.066 |
