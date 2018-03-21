@@ -21,6 +21,7 @@ class TrainingParams(dj.Lookup):
     momentum:               float           # momentum factor for SGD updates
     lr_decay:               float           # factor to multiply learning rate every epoch
     lr_schedule:            varchar(8)      # type of learning rate decay to use
+    positive_weight:        float           # relative weight for positive class examples (negative class weight is 1)
     """
     items = itertools.product(
         [1e-4, 1e-3, 1e-2, 1e-1],           # learning_rate
@@ -29,9 +30,12 @@ class TrainingParams(dj.Lookup):
         [100],                              # num_epochs
         [0.9],                              # momentum
         [0.95],                             # lr_decay
-        ['val_loss', 'none']                # lr_schedule: could be 'none', every 'epoch' or epochs when 'val_loss' does not decrease
+        ['val_loss', 'none'],               # lr_schedule: could be 'none', every 'epoch' or epochs when 'val_loss' does not decrease
+        [1, 4]                              # positive_weight
     )
-    contents = [[utils.list_hash(item), *item] for item in items]
+    contents = []
+    for item in items:
+        contents.append([utils.list_hash(item[:-1]), *item] if item[-1] == 1 else [utils.list_hash(item), *item])
 
 
 @schema
@@ -78,12 +82,13 @@ class ModelParams(dj.Lookup):
         use_batchnorm:      boolean         # whether to use batch normalization
         """
         hash_prefix = 'fcn'
-        items = [# num_features, kernel_sizes, dilation, padding, use_batchnorm
-            [(1, 8, 8, 16, 16, 32, 32, 2), (3, 3, 3, 3, 3, 1, 1), (1, 1, 2, 2, 3, 1, 1),
-             (1, 1, 2, 2, 3, 0, 0), False],
-            [(1, 8, 8, 16, 16, 32, 32, 2), (3, 3, 3, 3, 3, 1, 1), (1, 1, 2, 2, 3, 1, 1),
-             (1, 1, 2, 2, 3, 0, 0), True]
-        ]
+        items = itertools.product(
+            [(1, 8, 8, 16, 16, 32, 32, 2)], # num_features
+            [(3, 3, 3, 3, 3, 1, 1)],        # kernel_sizes
+            [(1, 1, 2, 2, 3, 1, 1)],        # dilation
+            [(1, 1, 2, 2, 3, 0, 0)],        # padding
+            [False, True]                   # use_batchnorm
+        )
 
     def fill():
         for model in [ModelParams.Linear, ModelParams.Dictionary, ModelParams.FCN]:

@@ -6,16 +6,20 @@ import torch
 torch.cuda.set_device(0)
 torch.backends.cudnn.benchmark=True # faster: 30secs vs 96 secs per epoch (without it)
 
+from bl3d import train
+train.TrainedModel().populate('model_hash LIKE "fcn%%"', reserve_jobs=True)
+#train.TrainedModel().populate(reserve_jobs=True)
+
 from bl3d import evaluate
 evaluate.SegmentationMetrics().populate(reserve_jobs=True)
 
-from bl3d import train
-train.TrainedModel().populate(reserve_jobs=True)
+
 
 # Getting evaluation results
 from bl3d import params, train, evaluate
 
-thashes = params.TrainingParams().fetch('training_hash', order_by=['learning_rate', 'weight_decay'])
+params_rel = params.TrainingParams() & {'lr_schedule': 'none', 'positive_weight': 1}
+thashes = params_rel.fetch('training_hash', order_by=['learning_rate', 'weight_decay'])
 train_losses = {}
 val_losses = {}
 best_val_losses = {}
@@ -24,7 +28,7 @@ best_epochs = {}
 best_thresholds = {}
 best_IOUs = {}
 model = 'model_hash LIKE "fcn_9%%"'
-set_ = 'train'
+set_ = 'val'
 for th in thashes:
     train_losses[th] = (train.TrainedModel() & {'training_hash': th} & model).fetch('train_loss')
     val_losses[th] = (train.TrainedModel() & {'training_hash': th} & model).fetch('val_loss')

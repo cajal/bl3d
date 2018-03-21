@@ -117,7 +117,7 @@ class TrainedModel(dj.Computed):
         net.train()
 
         # Declare optimizer
-        criterion = nn.CrossEntropyLoss()
+        criterion = nn.CrossEntropyLoss(weight=torch.Tensor([1, train_params['positive_weight']]))
         optimizer = optim.SGD(net.parameters(), lr=train_params['learning_rate'],
                               momentum=train_params['momentum'], nesterov=True,
                               weight_decay=train_params['weight_decay'])
