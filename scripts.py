@@ -6,11 +6,8 @@ import torch
 torch.cuda.set_device(0)
 torch.backends.cudnn.benchmark=True # faster: 30secs vs 96 secs per epoch (without it)
 
-from bl3d import train
+from bl3d import train, evaluate
 train.TrainedModel().populate('model_hash LIKE "fcn%%"', reserve_jobs=True)
-#train.TrainedModel().populate(reserve_jobs=True)
-
-from bl3d import evaluate
 evaluate.SegmentationMetrics().populate(reserve_jobs=True)
 
 
