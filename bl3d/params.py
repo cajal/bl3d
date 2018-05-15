@@ -24,7 +24,7 @@ class TrainingParams(dj.Lookup):
     positive_weight:        float           # relative weight for positive class examples (negative class weight is 1)
     """
     items = itertools.product(
-        [1e-4, 1e-3, 1e-2, 1e-1],           # learning_rate
+        [1e-4, 1e-3, 1e-2, 1e-1, 1e0],      # learning_rate
         [0, 1e-5, 1e-3, 1e-1, 1e1],         # weight decay
         [1234],                             # seed
         [100],                              # num_epochs
