@@ -1,0 +1,15 @@
+version: '2'
+services:
+  bash:
+    image: ecobost/bl3d
+    volumes:
+      - .:/src/bl3d/
+      - /tmp/:/tmp/
+      - /mnt/:/mnt/
+      - /etc/localtime:/etc/localtime:ro
+    environment: 
+      - DISPLAY=$DISPLAY
+    env_file: .env
+    entrypoint: /bin/bash
+    working_dir: /home/
+    ipc: host # needed for multiprocessing (dataloader) in pytorch
