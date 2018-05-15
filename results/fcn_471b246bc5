@@ -435,10 +435,9 @@ Trends are consistently the same, though
 ################################################################################
 # No learning rate schedule
 ################################################################################
-# VAL results
+# Val results
 Training and val losses look ok.
 For 0.1 (as with batchnorm fcn_986..), 3 out of 4 val_loss curves converge to a worst loss.
-
 
 ## Average best val loss (less is better)
 | Lambda/LR  | 0.0001   | 0.001 | 0.01  | 0.1   |
@@ -449,14 +448,14 @@ For 0.1 (as with batchnorm fcn_986..), 3 out of 4 val_loss curves converge to a 
 | 10         | 0.527    | 0.606 | 0.652 | 0.656 |
 
 ## Average best epoch
-| Lambda/LR  | 0.0001   | 0.001 | 0.01  | 0.1   |
-| 0          | 100      | 100   | 98    | 95    |     
-| 0.00001    | 100      | 99    | 98    | 96    |
-| 0.001      | 100      | 100   | 96    | 83    | 
-| 0.1        | 100      | 99    | 65    | 19    |
-| 10         | 1        | 1     | 1     | 34    |
+| Lambda/LR | 0.0001   | 0.001 | 0.01  | 0.1   |
+| 0         | 100      | 100   | 98    | 95    |     
+| 0.00001   | 100      | 99    | 98    | 96    |
+| 0.001     | 100      | 100   | 96    | 83    | 
+| 0.1       | 100      | 99    | 65    | 19    |
+| 10        | 1        | 1     | 1     | 34    |
 
-# Average best threshold
+## Average best threshold
 | Lambda/LR  | 0.0001   | 0.001 | 0.01  | 0.1   |
 | 0          | 0.04     | 0.13  | 0.20  | 0.27  |     
 | 0.00001    | 0.04     | 0.14  | 0.19  | 0.27  |
@@ -464,10 +463,97 @@ For 0.1 (as with batchnorm fcn_986..), 3 out of 4 val_loss curves converge to a 
 | 0.1        | 0.04     | 0.06  | 0.06  | 0.02  |
 | 10         | 0        | 0     | 0     | 0     |
 
-# Average best IOU
+## Average best IOU
 | Lambda/LR  | 0.0001   | 0.001 | 0.01  | 0.1   |
 | 0          | 0.068    | 0.117 | 0.329 | 0.396 |
 | 0.00001    | 0.068    | 0.117 | 0.33  | 0.387 |
 | 0.001      | 0.068    | 0.116 | 0.329 | 0.353 | 
 | 0.1        | 0.068    | 0.069 | 0.071 | 0.067 |
 | 10         | 0.066    | 0.066 | 0.065 | 0.066 |
+
+Conclusion:
+No learning rate schedule better than decreasing per epoch.
+Decreasing every 100 eprochs probably better.
+
+
+
+###############################################################################
+# Weighted loss + no learning rate schedule
+###############################################################################
+# Val results
+lr 0.0001 curve doesn't decrease much
+lr 0.01 seems to have nicer cruve shape (and also finishes in a lower loss)
+lr=0.1 is more noisier (not a lot) but converges to low value, too
+lambda of 0.1 and 10 cause no learning or divergence (too high)
+
+
+## Average best val loss (less is better)
+| Lambda/LR	| 0.0001| 0.001	| 0.01	| 0.1	|
+| 0		    | 0.562	| 0.449	| 0.302	| 0.245	|
+| 1e-05		| 0.562	| 0.449	| 0.302	| 0.244	|
+| 0.001		| 0.562	| 0.449	| 0.301	| 0.241	|
+| 0.1		| 0.563	| 0.533	| 0.541	| 0.544	|
+| 10		| 0.619	| 0.667	| 0.681	| 0.681	|
+
+## Average best epoch
+| Lambda/LR	| 0.0001| 0.001	| 0.01	| 0.1	|
+| 0		    | 100	| 99	| 98	| 95	|
+| 1e-05		| 100	| 99	| 98	| 96	|
+| 0.001		| 100	| 99	| 98	| 96	|
+| 0.1		| 100	| 74	| 8	    | 28	|
+| 10		| 1 	| 1 	| 10    | 63	|
+
+## Average best threshold
+| Lambda/LR	| 0.0001| 0.001	| 0.01	| 0.1	|
+| 0		    | 0.25	| 0.34	| 0.52	| 0.68	|
+| 1e-05		| 0.25	| 0.34	| 0.52	| 0.68	|
+| 0.001		| 0.25	| 0.34	| 0.52	| 0.62	|
+| 0.1		| 0.23	| 0.31	| 0.0	| 0.0	|
+| 10		| 0.0	| 0.0	| 0.0	| 0.0	|
+
+## Average best IOU
+| Lambda/LR	| 0.0001| 0.001	| 0.01	| 0.1	|
+| 0		    | 0.071	| 0.192	| 0.374	| 0.451	|
+| 1e-05		| 0.071	| 0.192	| 0.374	| 0.457	|
+| 0.001		| 0.071	| 0.192	| 0.375	| 0.461	|
+| 0.1		| 0.071	| 0.097	| 0.066	| 0.066	|
+| 10		| 0.066	| 0.066	| 0.066	| 0.066	|
+
+
+##############################################################################
+# Weighted loss + learning rate schedule
+##############################################################################
+# Val Losses
+Similar behavior as withhout learning rate schedule. Val losses seem to converge to smaller values
+
+## Average best val loss (less is better)
+| Lambda/LR	| 0.0001| 0.001	| 0.01	| 0.1	|
+| 0		    | 0.564	| 0.462	| 0.349	| 0.269	|
+| 1e-05		| 0.564	| 0.464	| 0.349	| 0.268	|
+| 0.001		| 0.564	| 0.463	| 0.349	| 0.262	|
+| 0.1		| 0.564	| 0.534	| 0.541	| 0.545	|
+| 10		| 0.619	| 0.667	| 0.681	| 0.681	|
+
+## Average best epoch
+| Lambda/LR	| 0.0001| 0.001	| 0.01	| 0.1	|
+| 0		    | 100	| 98	| 84	| 91	|
+| 1e-05		| 100	| 97	| 88	| 93	|
+| 0.001		| 100	| 97	| 86	| 83	|
+| 0.1		| 100	| 84	| 8 	| 9 	|
+| 10		| 1 	| 1 	| 1 	| 10	|
+
+## Average best threshold
+| Lambda/LR	| 0.0001| 0.001	| 0.01	| 0.1	|
+| 0		    | 0.24	| 0.36	| 0.41	| 0.62	|
+| 1e-05		| 0.24	| 0.36	| 0.41	| 0.62	|
+| 0.001		| 0.24	| 0.36	| 0.41	| 0.64	|
+| 0.1		| 0.23	| 0.31	| 0.28	| 0.0	|
+| 10		| 0.0	| 0.0	| 0.0	| 0.0	|
+
+## Average best IOU
+| Lambda/LR	| 0.0001| 0.001	| 0.01	| 0.1	|
+| 0		    | 0.071	| 0.177	| 0.311	| 0.43	|
+| 1e-05		| 0.071	| 0.175	| 0.31	| 0.43	|
+| 0.001		| 0.071	| 0.175	| 0.311	| 0.436	|
+| 0.1		| 0.071	| 0.097	| 0.073	| 0.066	|
+| 10		| 0.066	| 0.066	| 0.066	| 0.066	|
