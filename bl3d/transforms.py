@@ -1,6 +1,7 @@
 """ Some simple 3-D transforms. """
 import numpy as np
 
+
 class RandomCrop:
     """ Randomly crop a 3-d patch from a volume.
 
@@ -66,6 +67,7 @@ class ContrastNorm:
         volume = ((example[0] - example[0].mean(axis=(-1, -2, -3))) /
                   example[0].std(axis=(-1, -2, -3)))
         return (volume, example[1])
+
 
 class Copy:
     """ Creates a copy of the example.

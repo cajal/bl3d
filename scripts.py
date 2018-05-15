@@ -18,7 +18,7 @@ evaluate.SegmentationMetrics().populate(reserve_jobs=True)
 # Getting evaluation results
 from bl3d import params, train, evaluate
 
-params_rel = params.TrainingParams() & {'lr_schedule': 'none', 'positive_weight': 1}
+params_rel = params.TrainingParams() & {'lr_schedule': 'none', 'positive_weight': 4}
 thashes = params_rel.fetch('training_hash', order_by=['learning_rate', 'weight_decay'])
 train_losses = {}
 val_losses = {}
@@ -49,8 +49,19 @@ for th in thashes:
     for t in train_losses[th]: plt.plot(t)
     #for t in val_losses[th]: plt.plot(t)
     #plt.plot(train_losses[th].mean(axis=0))
-    plt.ylim([0, 0.6])
+    plt.ylim([0.1, 1.0])
     plt.show()
+
+# Report results (in matrix form)
+wds = [0, 0.00001, 0.001, 0.1, 10]
+lrs = [0.0001, 0.001, 0.01, 0.1]
+for metric, decimals in [(best_val_losses, 3), (best_epochs, 0), (best_thresholds, 2), (best_IOUs, 3)]:
+    print('##')
+    print('| Lambda/LR\t| 0.0001| 0.001\t| 0.01\t| 0.1\t|')
+    for i, wd in enumerate(wds):
+        res = [round(metric[th].mean(), decimals) for th in thashes[i: len(wds) * len(lrs): len(wds)]]
+        print('| {}\t\t| {}\t|'.format(wd, '\t| '.join(map(str, res))))
+    print('')
 
 ## Report results
 for th in thashes:
@@ -66,9 +77,12 @@ for th in thashes:
      print('')
 
 
+
 ####################################################################################
+# Running net on a new stack (from bl3d schema or from stack pipeline)
 import matplotlib.pyplot as plt
 from bl3d.evaluate import *
+import datajoint as dj
 
 rel = dj.U('model_hash', 'training_hash', 'set').aggr(SegmentationMetrics() & 'model_hash LIKE "fcn_9%%"' & {'set': 'val'}, avg='AVG(best_iou)')
 key = (rel & 'avg > 0.45').fetch1('KEY')
@@ -88,7 +102,7 @@ with torch.no_grad():
      output = forward_on_big_input(net, Variable(image.cuda()))
 torch.save(output, '/mnt/lab/users/ecobost/output_example2.torch')
 
-# meso stack
+### same in a meso stack
 stack = dj.create_virtual_module('meso', 'pipeline_stack')
 key = {'animal_id': 17977, 'session': 5, 'stack_idx': 10, 'channel': 1}
 slices = (stack.CorrectedStack.Slice() & key).fetch('slice', order_by='islice')
@@ -98,8 +112,7 @@ with torch.no_grad():
      output2 = forward_on_big_input(net, Variable(image2.cuda()))
 torch.save(output2, '/mnt/lab/users/ecobost/output_meso.torch')
 
-
-# In other computer
+## In other computer
 import torch
 import torch.nn.functional as F
 output = torch.load('/mnt/lab/users/ecobost/output_example2.torch')

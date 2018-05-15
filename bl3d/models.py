@@ -6,8 +6,8 @@ from torch.nn import functional as F
 def init_conv(modules):
     """ Initializes all module weights using He initialization and set biases to zero."""
     for module in modules:
-        nn.init.kaiming_normal(module.weight)
-        nn.init.constant(module.bias, 0)
+        nn.init.kaiming_normal_(module.weight)
+        nn.init.constant_(module.bias, 0)
 
 def arr2int(array):
     """ From array of numpy integers to tuple of Python ints."""

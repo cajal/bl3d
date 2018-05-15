@@ -4,7 +4,6 @@ import numpy as np
 import torch
 
 from torch.utils.data import DataLoader
-from torch.autograd import Variable
 from torch.nn import functional as F
 
 from bl3d import train
@@ -81,18 +80,17 @@ class SegmentationMetrics(dj.Computed):
             print('Threshold: {}'.format(threshold))
 
             confusion_matrix = np.zeros(4) # tp, fp, tn, fn
-            for image, label in dataloader:
-
-                with torch.no_grad():
+            with torch.no_grad():
+                for image, label in dataloader:
                     # Compute prediction (heatmap of probabilities)
-                    output = forward_on_big_input(net, Variable(image.cuda()))
+                    output = forward_on_big_input(net, image.cuda())
                     prediction = F.softmax(output, dim=1) # 1 x num_classes x depth x height x width
 
-                # Threshold prediction to create segmentation
-                segmentation = prediction[0, 1].data.cpu().numpy() > threshold
+                    # Threshold prediction to create segmentation
+                    segmentation = prediction[0, 1].cpu().numpy() > threshold
 
-                # Accumulate confusion matrix values
-                confusion_matrix += compute_confusion_matrix(segmentation, label.numpy())
+                    # Accumulate confusion matrix values
+                    confusion_matrix += compute_confusion_matrix(segmentation, label.numpy())
 
             # Calculate metrics
             metrics = compute_metrics(*confusion_matrix)

@@ -5,7 +5,6 @@ import numpy as np
 from torch import nn, optim
 from torchvision.transforms import Compose
 from torch.utils.data import DataLoader
-from torch.autograd import Variable
 
 from bl3d import data
 from bl3d import params
@@ -26,13 +25,12 @@ def compute_loss(net, dataloader, criterion):
     """ Compute average loss over examples in a dataloader. """
     net.eval()
 
-    loss = 0
-    for volume, label in dataloader:
-        with torch.no_grad():
-            volume, label = Variable(volume.cuda()), Variable(label.cuda())
-            output = net(volume) # 1 x num_classes x d x h x w
-            loss += criterion(output.view(output.shape[1], -1).t(), label.view(-1)).item()
-    loss /= len(dataloader)
+    total_loss = 0
+    with torch.no_grad():
+        for volume, label in dataloader:
+            volume, label = volume.cuda(), label.cuda()
+            total_loss += criterion(net(volume), label).item()
+    loss = total_loss / len(dataloader)
 
     net.train()
 
@@ -106,7 +104,8 @@ class TrainedModel(dj.Computed):
         val_transform = Compose([transforms.RandomCrop((224, 384, 384)), transforms.ContrastNorm()])
         dsets = {'train': datasets.SegmentationDataset(train_examples, train_transform),
                  'val': datasets.SegmentationDataset(val_examples, val_transform)}
-        dataloaders = {k: DataLoader(dset, shuffle=True, num_workers=2, pin_memory=True) for k, dset in dsets.items()}
+        dataloaders = {k: DataLoader(dset, shuffle=True, num_workers=2, pin_memory=True)
+                       for k, dset in dsets.items()}
 
         # Get model
         net = params.ModelParams.build_model(key)
@@ -117,7 +116,8 @@ class TrainedModel(dj.Computed):
         net.train()
 
         # Declare optimizer
-        label_weights = torch.cuda.FloatTensor([1, train_params['positive_weight']])
+        label_weights = torch.tensor([1, train_params['positive_weight']],
+                                     device=torch.device('cuda'))
         criterion = nn.CrossEntropyLoss(weight=label_weights)
         optimizer = optim.SGD(net.parameters(), lr=train_params['learning_rate'],
                               momentum=train_params['momentum'], nesterov=True,
@@ -140,15 +140,14 @@ class TrainedModel(dj.Computed):
             # Loop over training set
             for volume, label in dataloaders['train']:
                 # Move variables to GPU
-                volume, label = Variable(volume.cuda()), Variable(label.cuda())
+                volume, label = volume.cuda(), label.cuda()
 
                 # Zero the gradients
                 net.zero_grad()
 
                 # Compute loss
                 output = net(volume) # 1 x num_classes x d x h x w
-                vectorized = output.view(output.shape[1], -1).t() # n x num_classes
-                loss = criterion(vectorized, label.view(-1))
+                loss = criterion(output, label)
 
                 # Record training loss
                 loss_ = loss.item() # float
@@ -179,7 +178,7 @@ class TrainedModel(dj.Computed):
                 optimizer.step()
 
                 # Delete variables to free memory (only minimal gain)
-                del volume, label, output, vectorized, loss
+                del volume, label, output, loss
 
             # Record validation loss
             val_loss_ = compute_loss(net, dataloaders['val'], criterion)

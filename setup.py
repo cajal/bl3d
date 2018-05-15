@@ -3,7 +3,7 @@ from setuptools import setup
 
 setup(
     name='bl3d',
-    version='0.0.1',
+    version='0.0.2',
     description='Cell segmentation in 3D GCaMP structural recordings',
     author='Erick Cobos',
     author_email='ecobos@bcm.edu',
@@ -11,7 +11,7 @@ setup(
     url='https://github.com/cajal/bl3d',
     keywords= '2p 3d GCaMPs soma segmentation',
     packages=['bl3d'],
-    install_requires=['torch', 'datajoint', 'numpy', 'scipy', 'scikit-image'],
+    install_requires=['torch', 'numpy', 'scipy', 'scikit-image', 'datajoint',],
     classifiers=[
         'Development Status :: 3 - Alpha',
         'Intended Audience :: Science/Research',

@@ -1,4 +1,4 @@
-FROM nvidia/cuda:9.0-cudnn7-devel-ubuntu16.04
+FROM nvidia/cuda:9.1-cudnn7-devel
 
 LABEL maintainer="Erick Cobos <ecobos@bcm.edu>"
 
@@ -15,17 +15,17 @@ RUN apt-get update && \
     pip3 install numpy scipy matplotlib ipython
 
 # Install pytorch 
-#RUN pip3 install http://download.pytorch.org/whl/cu90/torch-0.3.1-cp35-cp35m-linux_x86_64.whl && \
-#    pip3 install torchvision
-
-# Install pytorch (from source, takes ~1h)
-RUN pip3 install numpy pyyaml mkl setuptools cmake cffi typing && \
-    apt-get install -y git && \
-    pip3 install git+https://github.com/pytorch/pytorch && \
+RUN pip3 install http://download.pytorch.org/whl/cu91/torch-0.4.0-cp35-cp35m-linux_x86_64.whl && \
     pip3 install torchvision
 
+# Install pytorch (from source, takes ~1h)
+#RUN pip3 install numpy pyyaml mkl setuptools cmake cffi typing && \
+#    apt-get install -y git && \
+#    pip3 install git+https://github.com/pytorch/pytorch && \
+#    pip3 install torchvision
+
 # Install datajoint
-RUN pip3 install git+https://github.com/datajoint/datajoint-python.git
+RUN pip3 install datajoint
 
 # Install bl3d
 ADD . /src/bl3d
