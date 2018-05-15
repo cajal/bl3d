@@ -98,7 +98,7 @@ class TrainedModel(dj.Computed):
 
         # Get datasets
         train_examples, val_examples = (Split() & key).fetch1('train_examples', 'val_examples')
-        train_transform = Compose([transforms.RandomCrop(208), transforms.RandomRotate(),
+        train_transform = Compose([transforms.RandomCrop(192), transforms.RandomRotate(),
                                    transforms.RandomHorizontalFlip(), transforms.ContrastNorm(),
                                    transforms.Copy()])
         val_transform = Compose([transforms.RandomCrop((224, 384, 384)), transforms.ContrastNorm()])
