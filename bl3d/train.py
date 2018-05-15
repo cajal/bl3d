@@ -101,7 +101,7 @@ class TrainedModel(dj.Computed):
         train_transform = Compose([transforms.RandomCrop(192), transforms.RandomRotate(),
                                    transforms.RandomHorizontalFlip(), transforms.ContrastNorm(),
                                    transforms.Copy()])
-        val_transform = Compose([transforms.RandomCrop((192, 384, 384)), transforms.ContrastNorm()])
+        val_transform = Compose([transforms.RandomCrop((224, 384, 384)), transforms.ContrastNorm()])
         dsets = {'train': datasets.SegmentationDataset(train_examples, train_transform),
                  'val': datasets.SegmentationDataset(val_examples, val_transform)}
         dataloaders = {k: DataLoader(dset, shuffle=True, num_workers=2, pin_memory=True)
@@ -157,6 +157,8 @@ class TrainedModel(dj.Computed):
                 # Check for divergence
                 if np.isnan(loss_) or np.isinf(loss_):
                     log('Error: Loss diverged!')
+                    del volume, label, output, loss
+
                     log('Inserting results...')
                     results = key.copy()
                     results['train_loss'] = train_loss
