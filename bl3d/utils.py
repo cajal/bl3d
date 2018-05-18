@@ -27,11 +27,14 @@ def create_video(stack, interval=100, repeat_delay=1000):
     return fig, video # if video is garbage collected, the animation stops
 
 
-def colorize_label(label):
+def colorize_label(label, num_colors=100):
     """ Transform single int labels into RGB with random colors."""
     from skimage import color
+    import numpy as np
 
-    rgb = color.label2rgb(label, bg_label=0)
+    colors = np.random.randint(0, 256, size=(num_colors, 3))
+    rgb = color.label2rgb(label, colors=colors, bg_label=0)
+    rgb = rgb.astype(np.uint8)
 
     return rgb
 
