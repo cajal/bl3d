@@ -102,8 +102,8 @@ class TrainedModel(dj.Computed):
                                    transforms.RandomHorizontalFlip(), transforms.ContrastNorm(),
                                    transforms.Copy()])
         val_transform = Compose([transforms.RandomCrop((224, 384, 384)), transforms.ContrastNorm()])
-        dsets = {'train': datasets.SegmentationDataset(train_examples, train_transform),
-                 'val': datasets.SegmentationDataset(val_examples, val_transform)}
+        dsets = {'train': datasets.SegmentationDataset(train_examples, train_transform, train_params['enhanced_input']),
+                 'val': datasets.SegmentationDataset(val_examples, val_transform, train_params['enhanced_input'])}
         dataloaders = {k: DataLoader(dset, shuffle=True, num_workers=2, pin_memory=True)
                        for k, dset in dsets.items()}
 

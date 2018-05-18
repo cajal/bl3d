@@ -69,6 +69,12 @@ class Stack(dj.Computed):
         volume:         external-bl3d       # depth(z) x height (y) x width (x)
         """
 
+    class EnhancedVolume(dj.Part):
+        definition = """ # volume after local contrast normalization and laplacian sharpening
+        -> master
+        ---
+        volume:         external-bl3d       # depth(z) x height (y) x width (x)
+        """
     class Label(dj.Part):
         definition = """ # mask labels from the red channel (ids start at one, zero for background)
         -> master

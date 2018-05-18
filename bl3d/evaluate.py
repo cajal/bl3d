@@ -61,7 +61,7 @@ class SegmentationMetrics(dj.Computed):
 
         # Get dataset
         examples = (train.Split() & key).fetch1('{}_examples'.format(key['set']))
-        dataset = datasets.SegmentationDataset(examples, transforms.ContrastNorm())
+        dataset = datasets.SegmentationDataset(examples, transforms.ContrastNorm(), (params.TrainingParams() & key).fetch1('enhanced_input'))
         dataloader = DataLoader(dataset, num_workers=2, pin_memory=True)
 
         # Iterate over different probability thresholds
