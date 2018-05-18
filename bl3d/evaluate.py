@@ -137,6 +137,7 @@ def forward_on_big_input(net, volume, max_size=256, padding=32, out_channels=2):
 
     Note:
         Assumes net and volume are in the same device (usually both in GPU).
+        If net is in train mode, each chunk will be batch normalized with diff parameters.
     """
     import itertools
 
