@@ -12,414 +12,53 @@ All converge fine.
 
 ###############################################################################
 # VALIDATION SET
-th 506e8ae88ee1918d93edb9745f0b3677
-lr 0.0001
-lambda 0.0
-best epoch (mean) 94.625
-best_val_loss (mean) 0.6454896250000001
-best_train_loss (mean) 0.697170125
-best_threshold (mean) 0.1484375
-best_iou (mean) 0.0673894625
-
-th c90f59c7fd28f561b45a113707b9de36
-lr 0.0001
-lambda 1e-05
-best epoch (mean) 96.0
-best_val_loss (mean) 0.644389625
-best_train_loss (mean) 0.691389
-best_threshold (mean) 0.1484375
-best_iou (mean) 0.06739875000000001
-
-th 26b8953d549ccbefb63a7ca45342e4bf
-lr 0.0001
-lambda 0.001
-best epoch (mean) 95.875
-best_val_loss (mean) 0.645307125
-best_train_loss (mean) 0.69699125
-best_threshold (mean) 0.15625
-best_iou (mean) 0.0673334
-
-th 4e164ef2c67e3d65480223893787d3ff
-lr 0.0001
-lambda 0.1
-best epoch (mean) 94.625
-best_val_loss (mean) 0.6356103750000001
-best_train_loss (mean) 0.6925012500000001
-best_threshold (mean) 0.15234375
-best_iou (mean) 0.067465725
-
-th 101c64c0aeccabfbcd23a20a1374318c
-lr 0.0001
-lambda 10.0
-best epoch (mean) 96.75
-best_val_loss (mean) 0.6562749999999999
-best_train_loss (mean) 0.66113375
-best_threshold (mean) 0.0
-best_iou (mean) 0.0655048125
-
-th f12ab67cc1c4c46f349ad5e4aeeb6e72
-lr 0.001
-lambda 0.0
-best epoch (mean) 98.75
-best_val_loss (mean) 0.25063475
-best_train_loss (mean) 0.25989850000000003
-best_threshold (mean) 0.1015625
-best_iou (mean) 0.099254325
-
-th cb4248db2a570276485a599902621bf1
-lr 0.001
-lambda 1e-05
-best epoch (mean) 96.375
-best_val_loss (mean) 0.250443625
-best_train_loss (mean) 0.259171875
-best_threshold (mean) 0.09765625
-best_iou (mean) 0.10007105
-
-th 7c3e48b0b14b48fa7190fb6cc8e9b9fc
-lr 0.001
-lambda 0.001
-best epoch (mean) 98.125
-best_val_loss (mean) 0.250525375
-best_train_loss (mean) 0.259659625
-best_threshold (mean) 0.09765625
-best_iou (mean) 0.0993707875
-
-th fe553877a6d3c0add1c22e7f28237771
-lr 0.001
-lambda 0.1
-best epoch (mean) 93.75
-best_val_loss (mean) 0.26472450000000003
-best_train_loss (mean) 0.27504675
-best_threshold (mean) 0.14453125
-best_iou (mean) 0.10292006249999999
-
-th 89f46bca7d3c4d07d2a0d65ce77a3e7c
-lr 0.001
-lambda 10.0
-best epoch (mean) 2.0
-best_val_loss (mean) 0.652280625
-best_train_loss (mean) 0.6610455
-best_threshold (mean) 0.0
-best_iou (mean) 0.0655048125
-
-th 7c84418961921cb1f3a560a442aee7b8
-lr 0.01
-lambda 0.0
-best epoch (mean) 75.875
-best_val_loss (mean) 0.20345675
-best_train_loss (mean) 0.211819375
-best_threshold (mean) 0.13671875
-best_iou (mean) 0.2241413875
-
-th 0e048aef5bfd027207ab373bbe272d3e
-lr 0.01
-lambda 1e-05
-best epoch (mean) 71.125
-best_val_loss (mean) 0.2041485
-best_train_loss (mean) 0.211901375
-best_threshold (mean) 0.1328125
-best_iou (mean) 0.22153012500000002
-
-th 6ad5a9cec3da0bec152b562e640cd9fc
-lr 0.01
-lambda 0.001
-best epoch (mean) 72.625
-best_val_loss (mean) 0.20173912500000002
-best_train_loss (mean) 0.21080274999999998
-best_threshold (mean) 0.140625
-best_iou (mean) 0.22981985
-
-th 6d84cfa128fe1d6be443c7119f161d1a
-lr 0.01
-lambda 0.1
-best epoch (mean) 93.875
-best_val_loss (mean) 0.19285075
-best_train_loss (mean) 0.19453700000000002
-best_threshold (mean) 0.22265625
-best_iou (mean) 0.405463375
-
-th 8a2147f95c3464ab8243da55ac46625a
-lr 0.01
-lambda 10.0
-best epoch (mean) 1.0
-best_val_loss (mean) 0.65316575
-best_train_loss (mean) 0.661068875
-best_threshold (mean) 0.0
-best_iou (mean) 0.0655048125
-
-th e54a7dd31248c83021449db7c7cd2b78
-lr 0.1
-lambda 0.0
-best epoch (mean) 85.375
-best_val_loss (mean) 0.155889875
-best_train_loss (mean) 0.147007875
-best_threshold (mean) 0.25
-best_iou (mean) 0.403286625
-
-th 2c18ae956203c0cb1af26691eec766e8
-lr 0.1
-lambda 1e-05
-best epoch (mean) 81.5
-best_val_loss (mean) 0.156585125
-best_train_loss (mean) 0.148324
-best_threshold (mean) 0.2421875
-best_iou (mean) 0.400387625
-
-th 9b3bb6cde567da468387df67bf7de6a3
-lr 0.1
-lambda 0.001
-best epoch (mean) 83.875
-best_val_loss (mean) 0.150432125
-best_train_loss (mean) 0.143308875
-best_threshold (mean) 0.26953125
-best_iou (mean) 0.412323125
-
-th 185d02a93a28b1cabdf05cc6c739baec
-lr 0.1
-lambda 0.1
-best epoch (mean) 77.625
-best_val_loss (mean) 0.22117575
-best_train_loss (mean) 0.22634737500000002
-best_threshold (mean) 0.15234375
-best_iou (mean) 0.2836792125
-
-th 442a00b97dee7e734987d06de9ceb375
-lr 0.1
-lambda 10.0
-best epoch (mean) 49.25
-best_val_loss (mean) 0.656259375
-best_train_loss (mean) 0.661060875
-best_threshold (mean) 0.0
-best_iou (mean) 0.0655048125
-
 ## Average best val loss (less is better)
-| Lambda/LR  | 0.0001   | 0.001 | 0.01  | 0.1   |
-| 0          | 0.645    | 0.251 | 0.203 | 0.156 |     
-| 0.00001    | 0.644    | 0.25  | 0.204 | 0.157 |
-| 0.001      | 0.645    | 0.251 | 0.202 | 0.15  | 
-| 0.1        | 0.636    | 0.265 | 0.193 | 0.22  |
-| 10         | 0.656    | 0.652 | 0.653 | 0.656 |
+| Lambda/LR	| 0.0001| 0.001	| 0.01	| 0.1	| 1 	|
+| 0	    	| 0.645	| 0.251	| 0.203	| 0.156	| 1.696	|
+| 1e-05		| 0.644	| 0.25	| 0.204	| 0.157	| 1.698	|
+| 0.001		| 0.645	| 0.251	| 0.202	| 0.15	| 1.346	|
+| 0.1		| 0.636	| 0.265	| 0.193	| 0.221	| 0.278	|
+| 10		| 0.656	| 0.652	| 0.653	| 0.656	| inf	|
 
 ## Average best epoch
-| Lambda/LR  | 0.0001   | 0.001 | 0.01  | 0.1   |
-| 0          | 95       | 99    | 76    | 86    |     
-| 0.00001    | 96       | 96    | 71    | 82    |
-| 0.001      | 96       | 98    | 73    | 84    | 
-| 0.1        | 95       | 94    | 94    | 78    |
-| 10         | 97       | 2     | 1     | 50    |
+| Lambda/LR	| 0.0001| 0.001	| 0.01	| 0.1	| 1 	|
+| 0	    	| 95.0	| 99.0	| 76.0	| 85.0	| 13.0	|
+| 1e-05		| 96.0	| 96.0	| 71.0	| 82.0	| 12.0	|
+| 0.001		| 96.0	| 98.0	| 73.0	| 84.0	| 12.0	|
+| 0.1		| 95.0	| 94.0	| 94.0	| 78.0	| 3.0	|
+| 10		| 97.0	| 2.0	| 1.0	| 49.0	| 0.0	|
 
 # Average best threshold
-| Lambda/LR  | 0.0001   | 0.001 | 0.01  | 0.1   |
-| 0          | 0.148    | 0.102 | 0.137 | 0.25  |     
-| 0.00001    | 0.148    | 0.098 | 0.133 | 0.242 |
-| 0.001      | 0.156    | 0.098 | 0.141 | 0.27  | 
-| 0.1        | 0.152    | 0.145 | 0.223 | 0.152 |
-| 10         | 0        | 0     | 0     | 0     |
+| Lambda/LR	| 0.0001| 0.001	| 0.01	| 0.1	| 1 	|
+| 0		    | 0.15	| 0.1	| 0.14	| 0.25	| 0.05	|
+| 1e-05		| 0.15	| 0.1	| 0.13	| 0.24	| 0.05	|
+| 0.001		| 0.16	| 0.1	| 0.14	| 0.27	| 0.05	|
+| 0.1		| 0.15	| 0.14	| 0.22	| 0.15	| 0.0	|
+| 10		| 0.0	| 0.0	| 0.0	| 0.0	| 0.0	|
 
 # Average best IOU
-| Lambda/LR  | 0.0001   | 0.001 | 0.01  | 0.1   |
-| 0          | 0.067    | 0.099 | 0.224 | 0.403 |
-| 0.00001    | 0.067    | 0.1   | 0.222 | 0.400 |
-| 0.001      | 0.067    | 0.099 | 0.23  | 0.412 | 
-| 0.1        | 0.067    | 0.103 | 0.405 | 0.284 |
-| 10         | 0.066    | 0.066 | 0.065 | 0.066 |
+| Lambda/LR	| 0.0001| 0.001	| 0.01	| 0.1	| 1 	|
+| 0	    	| 0.067	| 0.099	| 0.224	| 0.403	| 0.069	|
+| 1e-05		| 0.067	| 0.1	| 0.222	| 0.4	| 0.057	|
+| 0.001		| 0.067	| 0.099	| 0.23	| 0.412	| 0.075	|
+| 0.1		| 0.067	| 0.103	| 0.405	| 0.284	| 0.066	|
+| 10		| 0.066	| 0.066	| 0.066	| 0.066	| 0.066	|
 
 Conclusion:
-0.1 lr or up
+0.1 lr
 1e-4 lambda (between 1e-5 and 1e-3)
 
 
 ###############################################################################
 # Training set
 
-th 506e8ae88ee1918d93edb9745f0b3677
-lr 0.0001
-lambda 0.0
-best epoch (mean) 94.625
-best_val_loss (mean) 0.6454896250000001
-best_train_loss (mean) 0.697170125
-best_threshold (mean) 0.2265625
-best_iou (mean) 0.06666348750000001
-
-th c90f59c7fd28f561b45a113707b9de36
-lr 0.0001
-lambda 1e-05
-best epoch (mean) 96.0
-best_val_loss (mean) 0.644389625
-best_train_loss (mean) 0.691389
-best_threshold (mean) 0.22265625
-best_iou (mean) 0.0667362375
-
-th 26b8953d549ccbefb63a7ca45342e4bf
-lr 0.0001
-lambda 0.001
-best epoch (mean) 95.875
-best_val_loss (mean) 0.645307125
-best_train_loss (mean) 0.69699125
-best_threshold (mean) 0.23046875
-best_iou (mean) 0.06664956250000001
-
-th 4e164ef2c67e3d65480223893787d3ff
-lr 0.0001
-lambda 0.1
-best epoch (mean) 94.625
-best_val_loss (mean) 0.6356103750000001
-best_train_loss (mean) 0.6925012500000001
-best_threshold (mean) 0.23046875
-best_iou (mean) 0.066787875
-
-th 101c64c0aeccabfbcd23a20a1374318c
-lr 0.0001
-lambda 10.0
-best epoch (mean) 96.75
-best_val_loss (mean) 0.6562749999999999
-best_train_loss (mean) 0.66113375
-best_threshold (mean) 0.0
-best_iou (mean) 0.065353875
-
-th f12ab67cc1c4c46f349ad5e4aeeb6e72
-lr 0.001
-lambda 0.0
-best epoch (mean) 98.75
-best_val_loss (mean) 0.25063475
-best_train_loss (mean) 0.25989850000000003
-best_threshold (mean) 0.09375
-best_iou (mean) 0.0987963
-
-th cb4248db2a570276485a599902621bf1
-lr 0.001
-lambda 1e-05
-best epoch (mean) 96.375
-best_val_loss (mean) 0.250443625
-best_train_loss (mean) 0.259171875
-best_threshold (mean) 0.09375
-best_iou (mean) 0.099124925
-
-th 7c3e48b0b14b48fa7190fb6cc8e9b9fc
-lr 0.001
-lambda 0.001
-best epoch (mean) 98.125
-best_val_loss (mean) 0.250525375
-best_train_loss (mean) 0.259659625
-best_threshold (mean) 0.09375
-best_iou (mean) 0.09902026250000001
-
-th fe553877a6d3c0add1c22e7f28237771
-lr 0.001
-lambda 0.1
-best epoch (mean) 93.75
-best_val_loss (mean) 0.26472450000000003
-best_train_loss (mean) 0.27504675
-best_threshold (mean) 0.15625
-best_iou (mean) 0.099973075
-
-th 89f46bca7d3c4d07d2a0d65ce77a3e7c
-lr 0.001
-lambda 10.0
-best epoch (mean) 2.0
-best_val_loss (mean) 0.652280625
-best_train_loss (mean) 0.6610455
-best_threshold (mean) 0.0
-best_iou (mean) 0.065353875
-
-th 7c84418961921cb1f3a560a442aee7b8
-lr 0.01
-lambda 0.0
-best epoch (mean) 75.875
-best_val_loss (mean) 0.20345675
-best_train_loss (mean) 0.211819375
-best_threshold (mean) 0.11328125
-best_iou (mean) 0.203592125
-
-th 0e048aef5bfd027207ab373bbe272d3e
-lr 0.01
-lambda 1e-05
-best epoch (mean) 71.125
-best_val_loss (mean) 0.2041485
-best_train_loss (mean) 0.211901375
-best_threshold (mean) 0.109375
-best_iou (mean) 0.202108875
-
-th 6ad5a9cec3da0bec152b562e640cd9fc
-lr 0.01
-lambda 0.001
-best epoch (mean) 72.625
-best_val_loss (mean) 0.20173912500000002
-best_train_loss (mean) 0.21080274999999998
-best_threshold (mean) 0.11328125
-best_iou (mean) 0.207514625
-
-th 6d84cfa128fe1d6be443c7119f161d1a
-lr 0.01
-lambda 0.1
-best epoch (mean) 93.875
-best_val_loss (mean) 0.19285075
-best_train_loss (mean) 0.19453700000000002
-best_threshold (mean) 0.2265625
-best_iou (mean) 0.3887865
-
-th 8a2147f95c3464ab8243da55ac46625a
-lr 0.01
-lambda 10.0
-best epoch (mean) 1.0
-best_val_loss (mean) 0.65316575
-best_train_loss (mean) 0.661068875
-best_threshold (mean) 0.0
-best_iou (mean) 0.065353875
-
-th e54a7dd31248c83021449db7c7cd2b78
-lr 0.1
-lambda 0.0
-best epoch (mean) 85.375
-best_val_loss (mean) 0.155889875
-best_train_loss (mean) 0.147007875
-best_threshold (mean) 0.2578125
-best_iou (mean) 0.38771924999999996
-
-th 2c18ae956203c0cb1af26691eec766e8
-lr 0.1
-lambda 1e-05
-best epoch (mean) 81.5
-best_val_loss (mean) 0.156585125
-best_train_loss (mean) 0.148324
-best_threshold (mean) 0.24609375
-best_iou (mean) 0.38499862500000004
-
-th 9b3bb6cde567da468387df67bf7de6a3
-lr 0.1
-lambda 0.001
-best epoch (mean) 83.875
-best_val_loss (mean) 0.150432125
-best_train_loss (mean) 0.143308875
-best_threshold (mean) 0.265625
-best_iou (mean) 0.398088125
-
-th 185d02a93a28b1cabdf05cc6c739baec
-lr 0.1
-lambda 0.1
-best epoch (mean) 77.625
-best_val_loss (mean) 0.22117575
-best_train_loss (mean) 0.22634737500000002
-best_threshold (mean) 0.15234375
-best_iou (mean) 0.2850001375
-
-th 442a00b97dee7e734987d06de9ceb375
-lr 0.1
-lambda 10.0
-best epoch (mean) 49.25
-best_val_loss (mean) 0.656259375
-best_train_loss (mean) 0.661060875
-best_threshold (mean) 0.0
-best_iou (mean) 0.065353875
-
-
 # Average best IOU
-| Lambda/LR  | 0.0001   | 0.001 | 0.01  | 0.1   |
-| 0          | 0.067    | 0.099 | 0.204 | 0.388 |
-| 0.00001    | 0.067    | 0.099 | 0.202 | 0.385 |
-| 0.001      | 0.067    | 0.099 | 0.208 | 0.398 | 
-| 0.1        | 0.067    | 0.1   | 0.389 | 0.285 |
-| 10         | 0.065    | 0.065 | 0.065 | 0.066 |
+| Lambda/LR	| 0.0001| 0.001	| 0.01	| 0.1	| 1 	|
+| 0		    | 0.067	| 0.099	| 0.204	| 0.388	| 0.061	|
+| 1e-05		| 0.067	| 0.099	| 0.202	| 0.385	| 0.052	|
+| 0.001		| 0.067	| 0.099	| 0.208	| 0.398	| 0.056	|
+| 0.1		| 0.067	| 0.1	| 0.389	| 0.285	| 0.065	|
+| 10		| 0.065	| 0.065	| 0.065	| 0.065	| 0.065	|
 
 
 ################################################################################
@@ -433,36 +72,37 @@ Higher lambdas cause divergence.
 
 
 ## Average best val loss (less is better)
-| Lambda/LR  | 0.0001   | 0.001 | 0.01  | 0.1   |
-| 0          | 0.38     | 0.247 | 0.193 | 0.132 |     
-| 0.00001    | 0.379    | 0.247 | 0.193 | 0.131 |
-| 0.001      | 0.38     | 0.247 | 0.19  | 0.127 | 
-| 0.1        | 0.389    | 0.259 | 0.19  | 0.257 |
-| 10         | 0.656    | 0.652 | 0.653 | 0.656 |
+| Lambda/LR	| 0.0001| 0.001	| 0.01	| 0.1	| 1 	|
+| 0		    | 0.38	| 0.247	| 0.193	| 0.132	| 1.715	|
+| 1e-05		| 0.379	| 0.247	| 0.193	| 0.131	| 1.719	|
+| 0.001		| 0.38	| 0.247	| 0.19	| 0.127	| 1.366	|
+| 0.1		| 0.387	| 0.259	| 0.189	| 0.257	| 0.278	|
+| 10		| 0.656	| 0.652	| 0.653	| 0.656	| inf |
+
 
 ## Average best epoch
-| Lambda/LR  | 0.0001   | 0.001 | 0.01  | 0.1   |
-| 0          | 99       | 92    | 76    | 96    |     
-| 0.00001    | 99       | 92    | 76    | 98    |
-| 0.001      | 99       | 92    | 86    | 90    | 
-| 0.1        | 99       | 100   | 80    | 13    |
-| 10         | 82       | 2     | 1     | 36    |
+| Lambda/LR	| 0.0001| 0.001	| 0.01	| 0.1	| 1 	|
+| 0	    	| 99.0	| 92.0	| 76.0	| 96.0	| 1.0	|
+| 1e-05		| 99.0	| 92.0	| 76.0	| 98.0	| 1.0	|
+| 0.001		| 99.0	| 92.0	| 87.0	| 90.0	| 1.0	|
+| 0.1		| 99.0	| 100.0	| 80.0	| 13.0	| 14.0	|
+| 10		| 82.0	| 2.0	| 1.0	| 36.0	| 0.0	|
 
 # Average best threshold
-| Lambda/LR  | 0.0001   | 0.001 | 0.01  | 0.1   |
-| 0          | 0.22     | 0.09  | 0.14  | 0.36  |     
-| 0.00001    | 0.22     | 0.09  | 0.14  | 0.34  |
-| 0.001      | 0.22     | 0.09  | 0.14  | 0.29  | 
-| 0.1        | 0.25     | 0.14  | 0.31  | 0     |
-| 10         | 0        | 0     | 0     | 0     |
+| Lambda/LR	| 0.0001| 0.001	| 0.01	| 0.1	| 1 	|
+| 0		    | 0.22	| 0.09	| 0.14	| 0.36	| 0.0	|
+| 1e-05		| 0.22	| 0.09	| 0.14	| 0.34	| 0.0	|
+| 0.001		| 0.22	| 0.09	| 0.14	| 0.29	| 0.0	|
+| 0.1		| 0.25	| 0.14	| 0.31	| 0.0	| 0.0	|
+| 10		| 0.0	| 0.0	| 0.0	| 0.0	| 0.0	|
 
 # Average best IOU
-| Lambda/LR  | 0.0001   | 0.001 | 0.01  | 0.1   |
-| 0          | 0.07     | 0.111 | 0.291 | 0.446 |
-| 0.00001    | 0.07     | 0.111 | 0.291 | 0.443 |
-| 0.001      | 0.07     | 0.111 | 0.301 | 0.454 | 
-| 0.1        | 0.07     | 0.124 | 0.37  | 0.066 |
-| 10         | 0.066    | 0.066 | 0.066 | 0.066 |
+| Lambda/LR	| 0.0001| 0.001	| 0.01	| 0.1	| 1 	|
+| 0		    | 0.07	| 0.111	| 0.291	| 0.446	| 0.026	|
+| 1e-05		| 0.07	| 0.111	| 0.291	| 0.443	| 0.009	|
+| 0.001		| 0.07	| 0.111	| 0.301	| 0.454	| 0.017	|
+| 0.1		| 0.07	| 0.124	| 0.37	| 0.066	| 0.066	|
+| 10		| 0.066	| 0.066	| 0.066	| 0.066	| 0.066	|
 
 
 ###############################################################################
@@ -470,40 +110,40 @@ Higher lambdas cause divergence.
 ###############################################################################
 # Val results
 Slow lrs do not learn, 0.01 and 0.1 is more noisy (still acceptable) but converge to better results
-lambda of 0.1, 10 cause no learning or divergence (too high), 0.1.
+lambda of 0.1, 10 cause no learning or divergence (too high), 0.1. 0.001 seems to be sweet point
+Even with learning rate 1, this does not diverge
 
 ## Average best val loss (less is better)
-| Lambda/LR	| 0.0001| 0.001	| 0.01	| 0.1	|
-| 0		    | 0.581	| 0.485	| 0.325	| 0.233	|
-| 1e-05		| 0.582	| 0.486	| 0.322	| 0.233	|
-| 0.001		| 0.582	| 0.485	| 0.316	| 0.227	|
-| 0.1		| 0.576	| 0.471	| 0.309	| 0.527	|
-| 10		| 0.683	| 0.682	| 0.682	| 0.681	|
+| Lambda/LR	| 0.0001| 0.001	| 0.01	| 0.1	| 1 	|
+| 0		    | 0.581	| 0.485	| 0.325	| 0.233	| 1.626	|
+| 1e-05		| 0.582	| 0.486	| 0.322	| 0.233	| 1.723	|
+| 0.001		| 0.582	| 0.485	| 0.316	| 0.227	| 0.271	|
+| 0.1		| 0.576	| 0.471	| 0.309	| 0.527	| 0.548	|
+| 10		| 0.683	| 0.682	| 0.682	| 0.681	| inf	|
 
 ## Average best epoch
-| Lambda/LR	| 0.0001| 0.001	| 0.01	| 0.1	|
-| 0		    | 99	| 78	| 99	| 94	|
-| 1e-05		| 99	| 79	| 98	| 92	|
-| 0.001		| 99	| 79	| 99	| 90	|
-| 0.1		| 99	| 82	| 68	| 19	|
-| 10		| 37	| 2 	| 47	| 74	|
+| Lambda/LR	| 0.0001| 0.001	| 0.01	| 0.1	| 1 	|
+| 0		    | 99.0	| 78.0	| 99.0	| 94.0	| 53.0	|
+| 1e-05		| 99.0	| 79.0	| 98.0	| 92.0	| 56.0	|
+| 0.001		| 99.0	| 79.0	| 99.0	| 90.0	| 80.0	|
+| 0.1		| 99.0	| 82.0	| 68.0	| 19.0	| 55.0	|
+| 10		| 37.0	| 2.0	| 47.0	| 74.0	| 0.0	|
 
 ## Average best threshold
-| Lambda/LR	| 0.0001| 0.001	| 0.01	| 0.1	|
-| 0		    | 0.38	| 0.24	| 0.51	| 0.7	|
-| 1e-05		| 0.39	| 0.25	| 0.51	| 0.66	|
-| 0.001		| 0.39	| 0.25	| 0.51	| 0.66	|
-| 0.1		| 0.39	| 0.28	| 0.52	| 0.0	|
-| 10		| 0.0	| 0.0	| 0.0	| 0.0	|
-
+| Lambda/LR	| 0.0001| 0.001	| 0.01	| 0.1	| 1 	|
+| 0		    | 0.38	| 0.24	| 0.51	| 0.7	| 0.41	|
+| 1e-05		| 0.39	| 0.25	| 0.51	| 0.66	| 0.41	|
+| 0.001		| 0.39	| 0.25	| 0.51	| 0.66	| 0.43	|
+| 0.1		| 0.39	| 0.28	| 0.52	| 0.0	| 0.0	|
+| 10		| 0.0	| 0.0	| 0.0	| 0.0	| 0.0	|
 
 ## Average best IOU
-| Lambda/LR	| 0.0001| 0.001	| 0.01	| 0.1	|
-| 0		    | 0.08	| 0.148	| 0.383	| 0.46	|
-| 1e-05		| 0.08	| 0.148	| 0.385	| 0.461	|
-| 0.001		| 0.08	| 0.148	| 0.388	| 0.467	|
-| 0.1		| 0.08	| 0.171	| 0.368	| 0.066	|
-| 10		| 0.066	| 0.066	| 0.066	| 0.066	|
+| Lambda/LR	| 0.0001| 0.001	| 0.01	| 0.1	| 1 	|
+| 0		    | 0.08	| 0.148	| 0.383	| 0.46	| 0.274	|
+| 1e-05		| 0.08	| 0.148	| 0.385	| 0.461	| 0.275	|
+| 0.001		| 0.08	| 0.148	| 0.388	| 0.467	| 0.359	|
+| 0.1		| 0.08	| 0.171	| 0.368	| 0.066	| 0.066	|
+| 10		| 0.066	| 0.066	| 0.066	| 0.066	| 0.066	|
 
 
 ##############################################################################
@@ -514,35 +154,34 @@ All lrs seem to learn alright, 0.01 and 0.1 is more noisy (still acceptable) but
 lambda of 10 cause no learning or divergence (too high), 0.1, does sometimes, too
 
 ## Average best val loss (less is better)
-| Lambda/LR	| 0.0001| 0.001	| 0.01	| 0.1	|
-| 0		    | 0.713	| 0.5	| 0.379	| 0.283	|
-| 1e-05		| 0.711	| 0.499	| 0.379	| 0.279	|
-| 0.001		| 0.711	| 0.499	| 0.377	| 0.275	|
-| 0.1		| 0.71	| 0.489	| 0.302	| 0.343	|
-| 10		| 0.683	| 0.682	| 0.682	| 0.682	|
+| Lambda/LR	| 0.0001| 0.001	| 0.01	| 0.1	| 1 	|
+| 0		    | 0.713	| 0.5	| 0.379	| 0.283	| 0.394	|
+| 1e-05		| 0.711	| 0.499	| 0.379	| 0.279	| 0.396	|
+| 0.001		| 0.711	| 0.499	| 0.377	| 0.275	| 0.29	|
+| 0.1		| 0.71	| 0.489	| 0.302	| 0.343	| 0.549	|
+| 10		| 0.683	| 0.682	| 0.682	| 0.682	| inf	|
 
 ## Average best epoch
-| Lambda/LR	| 0.0001| 0.001	| 0.01	| 0.1	|
-| 0		    | 24	| 79	| 70	| 83	|
-| 1e-05		| 24	| 78	| 69	| 74	|
-| 0.001		| 25	| 78	| 67	| 76	|
-| 0.1		| 25	| 80	| 90	| 96	|
-| 10		| 59	| 2 	| 3 	| 22	|
+| Lambda/LR	| 0.0001| 0.001	| 0.01	| 0.1	| 1 	|
+| 0		    | 24.0	| 79.0	| 70.0	| 83.0	| 81.0	|
+| 1e-05		| 24.0	| 78.0	| 69.0	| 74.0	| 80.0	|
+| 0.001		| 25.0	| 78.0	| 67.0	| 76.0	| 79.0	|
+| 0.1		| 25.0	| 80.0	| 90.0	| 96.0	| 7.0	|
+| 10		| 59.0	| 2.0	| 3.0	| 22.0	| 0.0	|
+
 
 ## Average best threshold
-| Lambda/LR	| 0.0001| 0.001	| 0.01	| 0.1	|
-| 0		    | 0.21	| 0.27	| 0.38	| 0.61	|
-| 1e-05		| 0.21	| 0.27	| 0.39	| 0.61	|
-| 0.001		| 0.21	| 0.27	| 0.39	| 0.61	|
-| 0.1		| 0.22	| 0.29	| 0.54	| 0.41	|
-| 10		| 0.06	| 0.0	| 0.0	| 0.0	|
-
+| Lambda/LR	| 0.0001| 0.001	| 0.01	| 0.1	| 1 	|
+| 0		    | 0.21	| 0.27	| 0.38	| 0.61	| 0.44	|
+| 1e-05		| 0.21	| 0.27	| 0.39	| 0.61	| 0.38	|
+| 0.001		| 0.21	| 0.27	| 0.39	| 0.61	| 0.6	|
+| 0.1		| 0.22	| 0.29	| 0.54	| 0.41	| 0.0	|
+| 10		| 0.06	| 0.0	| 0.0	| 0.0	| 0.0	|
 
 ## Average best IOU
-| Lambda/LR	| 0.0001| 0.001	| 0.01	| 0.1	|
-| 0		    | 0.069	| 0.131	| 0.288	| 0.428	|
-| 1e-05		| 0.069	| 0.131	| 0.288	| 0.428	|
-| 0.001		| 0.069	| 0.132	| 0.291	| 0.435	|
-| 0.1		| 0.069	| 0.142	| 0.43	| 0.355	|
-| 10		| 0.066	| 0.066	| 0.066	| 0.066	|
-
+| Lambda/LR	| 0.0001| 0.001	| 0.01	| 0.1	| 1 	|
+| 0		    | 0.069	| 0.131	| 0.288	| 0.428	| 0.252	|
+| 1e-05		| 0.069	| 0.131	| 0.288	| 0.428	| 0.256	|
+| 0.001		| 0.069	| 0.132	| 0.291	| 0.435	| 0.417	|
+| 0.1		| 0.069	| 0.142	| 0.43	| 0.355	| 0.066	|
+| 10		| 0.066	| 0.066	| 0.066	| 0.066	| 0.066	|

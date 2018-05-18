@@ -7,7 +7,7 @@ Using the same learning rate across entire training rather than reducing learnin
     Stepwise decreases at epoch 100 and 200, for instance may even be better.
 Weighting the loss to increase the value of positive classes makes it better (0.5-0.1 without batchnorm, 0.01-0.02 when using batchnorm). As batchnorm, this may be easing training.
 Low close-to-zero lambdas have better results. lambdas >=0.1 cause divergence.
-High learning rates seem better 0.01 to 0.1 even though 0.1 starts to make noisier loss curves. Didn't try anything hiogher than 0.1. Maybe 0.1 needs more time to converge.
+High learning rates seem better 0.01 to 0.1 even though 0.1 starts to make noisier loss curves. Maybe leave them for more time for full convergence.
 
 # Caveat
 Same example used for early stopping as for hyperparameter search (but not in training).
