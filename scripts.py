@@ -77,67 +77,65 @@ for th in thashes:
 
 ####################################################################################
 # Running net on a new stack (from bl3d schema or from stack pipeline)
-import matplotlib.pyplot as plt
 from bl3d.evaluate import *
 import datajoint as dj
+import torch
+import torch.nn.functional as F
 
 rel = dj.U('model_hash', 'training_hash', 'set').aggr(SegmentationMetrics() & 'model_hash LIKE "fcn_9%%"' & {'set': 'val'}, avg='AVG(best_iou)')
-key = (rel & 'avg > 0.45').fetch1('KEY')
+key = (rel & 'avg > 0.465').fetch1('KEY')
 key['val_id'] = 2 # select one of the 8 trained networks
 
 net = train.TrainedModel.load_model(key)
-
-torch.cuda.set_device(7)
+net.eval() # so batchnorm uses the saved mean and gamma
 net.cuda()
 
 examples = [key['val_id']]
 dataset = datasets.SegmentationDataset(examples, transforms.ContrastNorm())
 dataloader = DataLoader(dataset, num_workers=2, pin_memory=True)
-
-image, label = iter(dataloader).__next__()
 with torch.no_grad():
-     output = forward_on_big_input(net, Variable(image.cuda()))
-torch.save(output, '/mnt/lab/users/ecobost/output_example2.torch')
+    image, label = iter(dataloader).__next__()
+    output = forward_on_big_input(net, image.cuda())
+ex2, lbl2  = image[0, 0].numpy(), label[0].numpy()
 
-### same in a meso stack
-stack = dj.create_virtual_module('meso', 'pipeline_stack')
-key = {'animal_id': 17977, 'session': 5, 'stack_idx': 10, 'channel': 1}
-slices = (stack.CorrectedStack.Slice() & key).fetch('slice', order_by='islice')
-stack = np.stack(slices)
-image2 = torch.from_numpy(stack).view(1, 1, 700, 1364, 1399)
-with torch.no_grad():
-     output2 = forward_on_big_input(net, Variable(image2.cuda()))
-torch.save(output2, '/mnt/lab/users/ecobost/output_meso.torch')
+# Saving and loading the arrays in a diff computer
+# torch.save(output, '/mnt/lab/users/ecobost/output_example2.torch')
+#torch.save(output2, '/mnt/lab/users/ecobost/output_meso.torch')
+#
+#from bl3d import data
+#ex2 = (data.Stack.Volume() & {'example_id': 2}).fetch1('volume')
+#lbl2 = (data.Stack.Label() & {'example_id': 2}).fetch1('label')
+#output = torch.load('/mnt/lab/users/ecobost/output_example2.torch')
+#
+#output2 = torch.load('/mnt/lab/users/ecobost/output_meso.torch')
 
-## In other computer
-import torch
-import torch.nn.functional as F
-output = torch.load('/mnt/lab/users/ecobost/output_example2.torch')
 prediction = F.softmax(output, dim=1)
 prediction.shape # [1, 2, 199, 498, 497]
-
-from bl3d import data
-ex2 = (data.Stack.Volume() & {'example_id': 2}).fetch1('volume')
-lbl2 = (data.Stack.Label() & {'example_id': 2}).fetch1('label')
 pred = prediction[0, 1, :, :, :].numpy()
 
 import matplotlib.pyplot as plt
 from matplotlib import animation
 fig, axes = plt.subplots(1, 2, sharex=True, sharey=True, figsize=(19, 9))
-im = axes[0].imshow(ex2[100])
+im = axes[0].imshow(lbl2[100])
 im2 = axes[1].imshow(pred[100], vmin=0, vmax=1)
-def update_img(i): im.set_data(lbl2[i]); im2.set_data(pred[i]); print(i)
+def update_img(i):
+    print(i)
+    im.set_data(lbl2[i])
+    im2.set_data(pred[i])
 video = animation.FuncAnimation(fig, update_img, 199, interval=150, repeat_delay=1000)
 fig.tight_layout()
-#video.save('/data/pipeline/axonal_threshold_1_4.mp4', dpi=250)
 fig.show()
 
-import datajoint as dj
+## same in a meso stack
 stack = dj.create_virtual_module('meso', 'pipeline_stack')
 key = {'animal_id': 17977, 'session': 5, 'stack_idx': 10, 'channel': 1}
 slices = (stack.CorrectedStack.Slice() & key).fetch('slice', order_by='islice')
 stack = np.stack(slices)
-output2 = torch.load('/mnt/lab/users/ecobost/output_meso.torch')
+stack = (stack - stack.mean()) / stack.std()
+with torch.no_grad():
+    image2 = torch.from_numpy(stack).view(1, 1, 700, 1322, 1410)
+    output2 = forward_on_big_input(net, image2.cuda())
+
 prediction2 = F.softmax(output2, dim=1)
 prediction2.shape # [1, 2, 199, 498, 497]
 pred2 = prediction2[0, 1, :, :, :].numpy()
@@ -147,8 +145,49 @@ from matplotlib import animation
 fig, axes = plt.subplots(1, 2, sharex=True, sharey=True, figsize=(19, 9))
 im = axes[0].imshow(stack[100])
 im2 = axes[1].imshow(pred2[100], vmin=0, vmax=1)
-def update_img(i): im.set_data(stack[i]); im2.set_data(pred2[i]); print(i)
+def update_img(i):
+    print(i)
+    im.set_data(stack[i])
+    im2.set_data(pred2[i])
 video = animation.FuncAnimation(fig, update_img, 700, interval=150, repeat_delay=1000)
 fig.tight_layout()
 #video.save('/data/pipeline/axonal_threshold_1_4.mp4', dpi=250)
 fig.show()
+
+# Get instances from segmentation (similar to getting the data from red channel)
+from skimage import filters, morphology, feature, measure, segmentation
+from scipy import ndimage
+
+# Global thresholding seems to be enough, local thresholding is counterproductive in dark parts of the FOV and deeper/shallower slices
+thresh_triangle = filters.threshold_triangle(pred) # 0.15
+thresh_mean = filters.threshold_mean(pred) # 0.17
+thresh_li = filters.threshold_li(pred) # 0.23
+thresh_yen = filters.threshold_yen(pred) # 0.27
+thresh_isodata = filters.threshold_isodata(pred) # 0.40
+thresh_otsu = filters.threshold_otsu(pred) # 0.40
+thresh_minimum = filters.threshold_minimum(pred) # 0.72
+thresh_iou = 0.78125 # threshold with the best IOU for this label
+# best seems to be around 0.5, otsu has better results for both ex2 and the stack
+thresh = thresh_otsu
+
+# Separate into objects
+peaks = feature.peak_local_max(ndimage.gaussian_filter(pred, 1), min_distance=4,
+                               threshold_abs=thresh, indices=False)
+markers = morphology.label(peaks)
+
+thresholded = pred > thresh
+filled = morphology.remove_small_objects(morphology.remove_small_holes(thresholded), 65) # volume of sphere with diameter 5
+distance = ndimage.distance_transform_edt(filled) + 1e-7 * np.random.random(distance.shape) # to break ties
+
+label = morphology.watershed(-distance, markers, mask=filled)
+print(label.max(), 'initial cells')
+
+# Remove masks that are too small or too large
+label = morphology.remove_small_objects(label, 65)
+too_large = [p.label for p in measure.regionprops(label) if p.area > 4189]
+for label_id in too_large:
+    label[label == label_id] = 0 # set to background
+label, _, _ = segmentation.relabel_sequential(label)
+print(label.max(), 'final cells')
+
+colored_labels = utils.colorize_label(label)
