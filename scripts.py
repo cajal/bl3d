@@ -15,7 +15,7 @@ evaluate.SegmentationMetrics().populate(reserve_jobs=True)
 # Getting evaluation results
 from bl3d import params, train, evaluate
 
-params_rel = params.TrainingParams() & {'lr_schedule': 'none', 'positive_weight': 4}
+params_rel = params.TrainingParams() & {'lr_schedule': 'val_loss', 'positive_weight': 4}
 thashes = params_rel.fetch('training_hash', order_by=['learning_rate', 'weight_decay'])
 train_losses = {}
 val_losses = {}
@@ -24,7 +24,7 @@ best_train_losses = {}
 best_epochs = {}
 best_thresholds = {}
 best_IOUs = {}
-model = 'model_hash LIKE "fcn_4%%"'
+model = 'model_hash LIKE "fcn_9%%"'
 set_ = 'val'
 for th in thashes:
     train_losses[th] = (train.TrainedModel() & {'training_hash': th} & model).fetch('train_loss')
@@ -51,10 +51,10 @@ for th in thashes:
 
 # Report results (in matrix form)
 wds = [0, 0.00001, 0.001, 0.1, 10]
-lrs = [0.0001, 0.001, 0.01, 0.1]
+lrs = [0.0001, 0.001, 0.01, 0.1, 1]
 for metric, decimals in [(best_val_losses, 3), (best_epochs, 0), (best_thresholds, 2), (best_IOUs, 3)]:
     print('##')
-    print('| Lambda/LR\t| 0.0001| 0.001\t| 0.01\t| 0.1\t|')
+    print('| Lambda/LR\t| 0.0001| 0.001\t| 0.01\t| 0.1\t| 1 \t|')
     for i, wd in enumerate(wds):
         res = [round(metric[th].mean(), decimals) for th in thashes[i: len(wds) * len(lrs): len(wds)]]
         print('| {}\t\t| {}\t|'.format(wd, '\t| '.join(map(str, res))))
@@ -168,9 +168,9 @@ thresh_otsu = filters.threshold_otsu(pred) # 0.40
 thresh_minimum = filters.threshold_minimum(pred) # 0.72
 thresh_iou = 0.78125 # threshold with the best IOU for this label
 # best seems to be around 0.5, otsu has better results for both ex2 and the stack
-thresh = thresh_otsu
 
 # Separate into objects
+thresh = filters.threshold_otsu(pred)
 peaks = feature.peak_local_max(ndimage.gaussian_filter(pred, 1), min_distance=4,
                                threshold_abs=thresh, indices=False)
 markers = morphology.label(peaks)
