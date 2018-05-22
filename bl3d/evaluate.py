@@ -9,6 +9,7 @@ from torch.nn import functional as F
 from bl3d import train
 from bl3d import datasets
 from bl3d import transforms
+from bl3d import params
 
 
 schema = dj.schema('ecobost_bl3d', locals())
