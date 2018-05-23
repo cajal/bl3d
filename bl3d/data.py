@@ -5,6 +5,7 @@ from scipy import ndimage
 from skimage import feature, morphology, measure, segmentation
 stack = dj.create_virtual_module('stack', 'pipeline_stack') # only needed when populating data
 
+from . import utils
 
 
 dj.config['external-bl3d'] = {'protocol': 'file', 'location': '/mnt/lab/users/ecobost'}
@@ -75,6 +76,7 @@ class Stack(dj.Computed):
         ---
         volume:         external-bl3d       # depth(z) x height (y) x width (x)
         """
+
     class Label(dj.Part):
         definition = """ # mask labels from the red channel (ids start at one, zero for background)
         -> master
@@ -124,6 +126,10 @@ class Stack(dj.Computed):
         green = get_stack(key, channel=1)
         volume = ndimage.zoom(green, um_per_px, order=1, output=np.float32)[bbox]
         self.Volume().insert1({'example_id': example_id, 'volume': volume})
+
+        # Save enhanced green channel (local contrast normalization -> sharpening)
+        enhanced = utils.sharpen_2pimage(utils.lcn(volume, (3, 30, 30)))
+        self.EnhancedVolume().insert1({'example_id': example_id, 'volume': enhanced})
 
         # Resize, crop, normalize contrast (locally) and smooth red channel
         red = get_stack(key, channel=2)
