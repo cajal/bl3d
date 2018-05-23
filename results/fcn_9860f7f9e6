@@ -169,7 +169,6 @@ lambda of 10 cause no learning or divergence (too high), 0.1, does sometimes, to
 | 0.1		| 25.0	| 80.0	| 90.0	| 96.0	| 7.0	|
 | 10		| 59.0	| 2.0	| 3.0	| 22.0	| 0.0	|
 
-
 ## Average best threshold
 | Lambda/LR	| 0.0001| 0.001	| 0.01	| 0.1	| 1 	|
 | 0		    | 0.21	| 0.27	| 0.38	| 0.61	| 0.44	|
@@ -185,3 +184,49 @@ lambda of 10 cause no learning or divergence (too high), 0.1, does sometimes, to
 | 0.001		| 0.069	| 0.132	| 0.291	| 0.435	| 0.417	|
 | 0.1		| 0.069	| 0.142	| 0.43	| 0.355	| 0.066	|
 | 10		| 0.066	| 0.066	| 0.066	| 0.066	| 0.066	|
+
+
+
+##############################################################################
+Weighted loss + no learning rate schedule + input preprocessing
+##############################################################################
+Learning curves look pretty ok and as if they may still go down a little bit for lr >= 0.01
+0.1 is a bit noisy but not as bad as with simple input. 1 still seems to converge fine
+High lambdas are again counterproductive
+
+## Average best val loss (less is better)
+| Lambda/LR	| 0.0001| 0.001	| 0.01	| 0.1	| 1 	|
+| 0		    | 0.646	| 0.444	| 0.285	| 0.217	| 0.204	|
+| 1e-05		| 0.646	| 0.444	| 0.285	| 0.217	| 0.204	|
+| 0.001		| 0.645	| 0.443	| 0.282	| 0.21	| 0.216	|
+| 0.1		| 0.634	| 0.434	| 0.265	| 0.405	| 0.547	|
+| 10		| 0.681	| 0.676	| 0.679	| 0.677	| inf	|
+
+## Average best epoch
+| Lambda/LR	| 0.0001| 0.001	| 0.01	| 0.1	| 1 	|
+| 0		    | 87.0	| 100.0	| 99.0	| 93.0	| 93.0	|
+| 1e-05		| 87.0	| 100.0	| 99.0	| 93.0	| 94.0	|
+| 0.001		| 87.0	| 100.0	| 99.0	| 94.0	| 67.0	|
+| 0.1		| 100.0	| 100.0	| 91.0	| 38.0	| 24.0	|
+| 10		| 98.0	| 2.0	| 1.0	| 58.0	| 0.0	|
+
+## Average best threshold
+| Lambda/LR	| 0.0001| 0.001	| 0.01	| 0.1	| 1 	|
+| 0		    | 0.47	| 0.45	| 0.6	| 0.68	| 0.77	|
+| 1e-05		| 0.47	| 0.45	| 0.6	| 0.68	| 0.78	|
+| 0.001		| 0.47	| 0.45	| 0.6	| 0.72	| 0.59	|
+| 0.1		| 0.47	| 0.42	| 0.68	| 0.34	| 0.0	|
+| 10		| 0.0	| 0.0	| 0.0	| 0.0	| 0.0	|
+
+## Average best IOU
+| Lambda/LR	| 0.0001| 0.001	| 0.01	| 0.1	| 1 	|
+| 0		    | 0.077	| 0.201	| 0.421	| 0.493	| 0.509	|
+| 1e-05		| 0.077	| 0.201	| 0.421	| 0.493	| 0.508	|
+| 0.001		| 0.077	| 0.201	| 0.425	| 0.5	| 0.469	|
+| 0.1		| 0.078	| 0.23	| 0.473	| 0.123	| 0.066	|
+| 10		| 0.066	| 0.066	| 0.066	| 0.066	| 0.066	|
+
+Conclusion:
+Definitely better than simple inputs: 0.47->0.51.
+It could be overfitting a bit.
+
