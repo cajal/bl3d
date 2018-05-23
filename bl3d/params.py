@@ -22,6 +22,7 @@ class TrainingParams(dj.Lookup):
     lr_decay:               float           # factor to multiply learning rate every epoch
     lr_schedule:            varchar(8)      # type of learning rate decay to use
     positive_weight:        float           # relative weight for positive class examples (negative class weight is 1)
+    enhanced_input:         boolean         # whether to use enhanced input
     """
     items = itertools.product(
         [1e-4, 1e-3, 1e-2, 1e-1, 1e0],      # learning_rate
@@ -31,11 +32,15 @@ class TrainingParams(dj.Lookup):
         [0.9],                              # momentum
         [0.95],                             # lr_decay
         ['val_loss', 'none'],               # lr_schedule: could be 'none', every 'epoch' or epochs when 'val_loss' does not decrease
-        [1, 4]                              # positive_weight
+        [1, 4],                             # positive_weight
+        [False, True]                     # enhanced_input
     )
     contents = []
-    for item in items:
-        contents.append([utils.list_hash(item[:-1]), *item] if item[-1] == 1 else [utils.list_hash(item), *item])
+#    # positive_weight and enhanced_input where added later so dealing with hashes is messy
+#    # code below was written
+#    for item in items:
+#        if item[-2] == 1 and item[-1]
+#        contents.append([utils.list_hash(item[:-1]), *item] if item[-1] == 1 else [utils.list_hash(item), *item])
 
 
 @schema
@@ -112,25 +117,3 @@ class ModelParams(dj.Lookup):
             return models.FullyConvNet(*params)
         else:
             raise ValueError('Model key {} not found.'.format(key))
-
-
-@schema
-class CrossValParams(dj.Lookup):
-    definition=""" # different parameters used during evaluation
-    xval_hash:              varchar(64)     # unique id for evaluation parameters
-    ---
-    num_thresholds:         tinyint         # number of (linspaced) thresholds to try
-    gaussian_std:           float           # standard deviation of gaussian window used for smoothing
-    min_distance:           int             # minimum distance between local maxima in the volume
-    min_voxels:             int             # minimum number of voxels for a mask to be valid
-    max_voxels:             int             # maximum number of voxels for a mask to be valid
-    """
-
-    items = itertools.product(
-        [26],                               # num_thresholds
-        [0, 0.6],                           # gaussian_std
-        [4, 5, 6],                          # min_distance
-        [34, 113, 268],                     # min_voxels: sphere volume for d in [4, 6, 8]
-        [1437, 2144, 3054, 1e9],            # max_voxels: sphere volume fo r d in [14, 16, 18, infty]
-    )
-    contents = [[utils.list_hash(item), *item] for item in items]
