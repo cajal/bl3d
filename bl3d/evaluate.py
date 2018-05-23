@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 import datajoint as dj
 import numpy as np
 import torch
@@ -123,17 +122,146 @@ class SegmentationMetrics(dj.Computed):
         self.ThresholdSelection().insert1(threshold_metrics)
 
 
+@schema
+class DetectionMetrics(dj.Computed):
+    definition = """ # object detection metrics
+    -> train.TrainedModel
+    -> Set
+    ---
+    map:            float       # mean average precision over all acceptance IOUs (same as COCO's mAP)
+    f1:             float       # mean F1 over all acceptance IOUs
+    map_50:         float       # mean average precision at IOU = 0.5 (default in Pascal VOC)
+    map_75:         float       # mean average precision at IOU = 0.75 (more strict)
+    f1_50:          float       # F-1 at acceptance IOU = 0.5
+    f1_75:          float       # F-1 at acceptance IOU = 0.75
+    """
+    class PerIOU(dj.Part):
+        definition = """ # some metrics computed at a single acceptance IOUs
+        -> master
+        iou:                float       # acceptance iou used
+        ---
+        tps:                int         # true positives
+        fps:                int         # false positives
+        fns:                int         # false negatives
+        accuracy:           float
+        precision:          float
+        recall:             float       # recall/sensitivity
+        map:                float
+        f1:                 float       # F-1 score
+        """
+
+    def make(self, key):
+        print('Evaluating', key)
+
+        # Get model
+        net = train.TrainedModel.load_model(key)
+
+        # Move model to GPU
+        net.cuda()
+        net.eval()
+
+        # true negatives = 0
+        pass
+
+    """ mAP as computed by COCO:
+        for each class
+            for each image
+                Predict k bounding boxes and k confidences
+                Order by decreasing confidence
+                for each bbox
+                    for each acceptance_iou in [0.5, 0.55, 0.6, ..., 0.85, 0.9, 0.95]
+                        Find the highest IOU ground truth box that has not been assigned yet
+                        if highest iou > acceptance_iou
+                            Save whether bbox is a match (and with whom it matches)
+                    accum results over all acceptance ious
+                accum results over all bboxes
+            accum results over all images
+
+            Reorder by decreasing confidence
+            for each acceptance_iou in [0.5, 0.55, 0.6, ..., 0.85, 0.9, 0.95]:
+                Compute precision and recall at each example
+                for r in 0, 0.1, 0.2, ..., 1:
+                    find precision at r as max(prec) at recall >= r
+                average all 11 precisions -> average precision at detection_iou
+            average all aps -> average precision
+        average over all clases -> mean average precision
+    """
+
+def _prob2labels(pred):
+    """ Transform voxelwise probabilities from a segmentation to instances.
+
+    Pretty ad hoc. Bunch of numbers were manually chosen.
+
+    Arguments:
+        pred: Array with predicted probabilities.
+
+    Returns:
+        Array with same shape as pred with zero for background and positive integers for
+            each predicted instance.
+    """
+    from skimage import filters, feature, morphology, measure, segmentation
+    from scipy import ndimage
+
+    # Find good binary threshold (may be a bit lower than best possible IOU, catches true cells that weren't labeled)
+    thresh = filters.threshold_otsu(pred)
+
+    # Find local maxima in the prediction heatmap
+    smooth_pred = ndimage.gaussian_filter(pred, 1)
+    peaks = feature.peak_local_max(smooth_pred, min_distance=4, threshold_abs=thresh,
+                                   indices=False)
+    markers = morphology.label(peaks)
+
+    # Separate into instances based on distance
+    thresholded = pred > thresh
+    filled = morphology.remove_small_objects(morphology.remove_small_holes(thresholded), 65) # volume of sphere with diameter 5
+    distance = ndimage.distance_transform_edt(filled)
+    distance += 1e-7 * np.random.random(distance.shape) # to break ties
+    label = morphology.watershed(-distance, markers, mask=filled)
+    print(label.max(), 'initial cells')
+
+    # Remove masks that are too small or too large
+    label = morphology.remove_small_objects(label, 65)
+    too_large = [p.label for p in measure.regionprops(label) if p.area > 4189]
+    for label_id in too_large:
+        label[label == label_id] = 0 # set to background
+    label, _, _ = segmentation.relabel_sequential(label)
+    print(label.max(), 'final cells')
+
+    return label
+
+
+def find_matches(labels, prediction):
+    """ Find all labels that intersect with a given predicted mask.
+
+    Arguments:
+        labels: Array with zeros for background and positive integers for each ground
+            truth object in the volume.
+        prediction: Boolean array with ones for the predicted mask. Same shape as labels.
+
+    Returns:
+        List of (label, iou) pairs sorted by decreasing IOU.
+    """
+    ious = []
+    for l in np.unique(labels[prediction]):
+        label = labels == l
+        iou = np.sum(np.logical_and(label, prediction)) / np.sum(np.logical_or(label, prediction))
+        ious.append((l, iou))
+    ious = sorted(ious, key=lambda x: x[1], reverse=True)
+
+    return ious
+
+
 def forward_on_big_input(net, volume, max_size=256, padding=32, out_channels=2):
     """ Passes a big volume through a network dividing it in chunks.
 
     Arguments:
-    net: A pytorch network.
-    volume: The input to the network (num_examples x num_channels x d1 x d2 x d3 x ...).
-    max_size: An int or tuple of ints. Maximum input size for every volume dimension.
-    pad_amount: An int or tuple of ints. Amount of padding performed by the network. We
-        discard an edge of this size out of chunks in the middle of the FOV to avoid
-        padding effects. Better to overestimate.
-    out_channels: Number of channels in the output.
+        net: A pytorch network.
+        volume: The input to the network (num_examples x num_channels x d1 x d2 x ...).
+        max_size: An int or tuple of ints. Maximum input size for every volume dimension.
+        pad_amount: An int or tuple of ints. Amount of padding performed by the network.
+            We discard an edge of this size out of chunks in the middle of the FOV to
+            avoid padding effects. Better to overestimate.
+        out_channels: Number of channels in the output.
 
     Note:
         Assumes net and volume are in the same device (usually both in GPU).
@@ -175,7 +303,16 @@ def forward_on_big_input(net, volume, max_size=256, padding=32, out_channels=2):
 
 
 def compute_confusion_matrix(segmentation, label):
-    """Confusion matrix for a single image: # of pixels in each category."""
+    """Confusion matrix for a single image: # of pixels in each category.
+
+    Arguments:
+        segmentation: Boolean array. Predicted segmentation.
+        label: Boolean array. Expected segmentation.
+
+    Returns:
+        A quadruple with true positives, false positives, true negatives and false
+            negatives
+    """
     true_positive = np.sum(np.logical_and(segmentation, label))
     false_positive = np.sum(np.logical_and(segmentation, np.logical_not(label)))
     true_negative = np.sum(np.logical_and(np.logical_not(segmentation), np.logical_not(label)))
@@ -185,8 +322,19 @@ def compute_confusion_matrix(segmentation, label):
 
 
 def compute_metrics(true_positive, false_positive, true_negative, false_negative):
-    """ Computes a set of different metrics given the confusion matrix values."""
-    epsilon = 1e-8 # To avoid division by zero
+    """ Computes a set of different metrics given the confusion matrix values.
+
+    Arguments:
+        true_positive: Number of true positive examples/pixels.
+        false_positive: Number of false positive examples/pixels.
+        true_negative: Number of true negative examples/pixels.
+        false_negative: Number of false negative examples/pixels.
+
+    Returns:
+        A septuple with IOU, F-1 score, accuracy, sensitivity, specificity, precision and
+            recall.
+    """
+    epsilon = 1e-7 # To avoid division by zero
 
     # Evaluation metrics
     accuracy = (true_positive + true_negative) / (true_positive + true_negative +
@@ -199,12 +347,3 @@ def compute_metrics(true_positive, false_positive, true_negative, false_negative
     f1 = (2 * precision * recall) / (precision + recall + epsilon)
 
     return (iou, f1, accuracy, sensitivity, specificity, precision, recall)
-
-#TODO: class DetectionMetrics
-    #best_mean_IOU per bounding box (by IOU I mean mean_IOU)
-# use sensitivity and recall measures for detection too, (so per object rather than per pixel). One problem is how to deal with predictions that cover more than one ...
-# true mask, I could compute IOu and assign it to that mask, (yet to solve if two predicted masks hit the same one are both right?). Should probably be a one to-one ...
-# correspondence, each lab el mask should be related with the highest IOU predicted mask (any non-highest IOU will be considered as false positive)
-# Other detecton metric, IOU oif bounding boxes
-
-
