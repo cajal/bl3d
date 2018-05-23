@@ -33,14 +33,9 @@ class TrainingParams(dj.Lookup):
         [0.95],                             # lr_decay
         ['val_loss', 'none'],               # lr_schedule: could be 'none', every 'epoch' or epochs when 'val_loss' does not decrease
         [1, 4],                             # positive_weight
-        [False, True]                     # enhanced_input
+        [False, True]                       # enhanced_input
     )
-    contents = []
-#    # positive_weight and enhanced_input where added later so dealing with hashes is messy
-#    # code below was written
-#    for item in items:
-#        if item[-2] == 1 and item[-1]
-#        contents.append([utils.list_hash(item[:-1]), *item] if item[-1] == 1 else [utils.list_hash(item), *item])
+    #Note: Contents are inserted manually
 
 
 @schema
