@@ -7,7 +7,7 @@ torch.cuda.set_device(0)
 torch.backends.cudnn.benchmark=True # faster: 30secs vs 96 secs per epoch (without it)
 
 from bl3d import train, evaluate
-train.TrainedModel().populate('model_hash LIKE "fcn%%"', reserve_jobs=True)
+train.TrainedModel().populate('model_hash LIKE "fcn_9%%"', reserve_jobs=True)
 evaluate.SegmentationMetrics().populate(reserve_jobs=True)
 
 
@@ -15,7 +15,7 @@ evaluate.SegmentationMetrics().populate(reserve_jobs=True)
 # Getting evaluation results
 from bl3d import params, train, evaluate
 
-params_rel = params.TrainingParams() & {'lr_schedule': 'val_loss', 'positive_weight': 4}
+params_rel = params.TrainingParams() & {'lr_schedule': 'none', 'positive_weight': 4, 'enhanced_input': True}
 thashes = params_rel.fetch('training_hash', order_by=['learning_rate', 'weight_decay'])
 train_losses = {}
 val_losses = {}
@@ -155,9 +155,7 @@ fig.tight_layout()
 fig.show()
 
 # Get instances from segmentation (similar to getting the data from red channel)
-from skimage import filters, morphology, feature, measure, segmentation
-from scipy import ndimage
-
+from skimage import filters
 # Global thresholding seems to be enough, local thresholding is counterproductive in dark parts of the FOV and deeper/shallower slices
 thresh_triangle = filters.threshold_triangle(pred) # 0.15
 thresh_mean = filters.threshold_mean(pred) # 0.17
@@ -168,26 +166,3 @@ thresh_otsu = filters.threshold_otsu(pred) # 0.40
 thresh_minimum = filters.threshold_minimum(pred) # 0.72
 thresh_iou = 0.78125 # threshold with the best IOU for this label
 # best seems to be around 0.5, otsu has better results for both ex2 and the stack
-
-# Separate into objects
-thresh = filters.threshold_otsu(pred)
-peaks = feature.peak_local_max(ndimage.gaussian_filter(pred, 1), min_distance=4,
-                               threshold_abs=thresh, indices=False)
-markers = morphology.label(peaks)
-
-thresholded = pred > thresh
-filled = morphology.remove_small_objects(morphology.remove_small_holes(thresholded), 65) # volume of sphere with diameter 5
-distance = ndimage.distance_transform_edt(filled) + 1e-7 * np.random.random(distance.shape) # to break ties
-
-label = morphology.watershed(-distance, markers, mask=filled)
-print(label.max(), 'initial cells')
-
-# Remove masks that are too small or too large
-label = morphology.remove_small_objects(label, 65)
-too_large = [p.label for p in measure.regionprops(label) if p.area > 4189]
-for label_id in too_large:
-    label[label == label_id] = 0 # set to background
-label, _, _ = segmentation.relabel_sequential(label)
-print(label.max(), 'final cells')
-
-colored_labels = utils.colorize_label(label)
