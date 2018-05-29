@@ -215,7 +215,7 @@ class DetectionMetrics(dj.Computed):
                 label = label[0].numpy()
 
             # Error if all predictions are the same (no way to segment instances)
-            if np.max(np.abs(pred - pred.mean())) < 1e-7:
+            if np.max(np.abs(pred - pred[0, 0, 0])) < 1e-7:
                 print('Error: All predicted probabilities are the same:', np.mean(pred))
                 self.insert1({**key, 'map': 0, 'mf1': 0, 'ap_50': 0, 'ap_75': 0,
                               'f1_50': 0, 'f1_75': 0})
