@@ -121,4 +121,3 @@ def sharpen_2pimage(image, laplace_sigma=0.7, low_percentile=3, high_percentile=
     norm = (clipped - clipped.mean()) / (clipped.max() - clipped.min() + 1e-7)
 
     return norm
-

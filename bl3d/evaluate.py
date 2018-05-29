@@ -32,6 +32,7 @@ class SegmentationMetrics(dj.Computed):
     best_iou:               float
     best_f1:                float
     """
+
     class ThresholdSelection(dj.Part):
         definition= """ # all thresholds tried
         -> master
@@ -54,8 +55,6 @@ class SegmentationMetrics(dj.Computed):
 
         # Get model
         net = train.TrainedModel.load_model(key)
-
-        # Move model to GPU
         net.cuda()
         net.eval()
 
@@ -92,7 +91,8 @@ class SegmentationMetrics(dj.Computed):
                     segmentation = prediction[0, 1].cpu().numpy() > threshold
 
                     # Accumulate confusion matrix values
-                    confusion_matrix += compute_confusion_matrix(segmentation, label.numpy())
+                    confusion_matrix += compute_confusion_matrix(segmentation,
+                                                                 label[0].numpy())
 
             # Calculate metrics
             metrics = compute_metrics(*confusion_matrix)
@@ -132,126 +132,142 @@ class DetectionMetrics(dj.Computed):
     -> Set
     ---
     map:            float       # mean average precision over all acceptance IOUs (same as COCO's mAP)
-    f1:             float       # mean F1 over all acceptance IOUs
-    map_50:         float       # mean average precision at IOU = 0.5 (default in Pascal VOC)
-    map_75:         float       # mean average precision at IOU = 0.75 (more strict)
+    mf1:            float       # mean F1 over all acceptance IOUs
+    ap_50:          float       # average precision at IOU = 0.5 (default in Pascal VOC)
+    ap_75:          float       # average precision at IOU = 0.75 (more strict)
     f1_50:          float       # F-1 at acceptance IOU = 0.5
     f1_75:          float       # F-1 at acceptance IOU = 0.75
     """
+
     class PerIOU(dj.Part):
         definition = """ # some metrics computed at a single acceptance IOUs
         -> master
         iou:                float       # acceptance iou used
         ---
+        ap_precisions:      blob        # precisions at recall (0, 0.1, ... 0.9, 1)
+        ap:                 float       # average precision (area under PR curve)
         tps:                int         # true positives
         fps:                int         # false positives
         fns:                int         # false negatives
         accuracy:           float
         precision:          float
-        recall:             float       # recall/sensitivity
-        map:                float
+        recall:             float
         f1:                 float       # F-1 score
         """
 
     def make(self, key):
+        """ Compute mean average precision and other detection metrics
+
+        Pseudocode for mAP as computed in COCO (Everingham et al., 2010; Sec 4.2):
+            for each class
+                for each image
+                    Predict k bounding boxes and k confidences
+                    Order by decreasing confidence
+                    for each bbox
+                        for each acceptance_iou in [0.5, 0.55, 0.6, ..., 0.85, 0.9, 0.95]
+                            Find the highest IOU ground truth box that has not been assigned yet
+                            if highest iou > acceptance_iou
+                                Save whether bbox is a match (and with whom it matches)
+                        accum results over all acceptance ious
+                    accum results over all bboxes
+                accum results over all images
+
+                Reorder by decreasing confidence
+                for each acceptance_iou in [0.5, 0.55, 0.6, ..., 0.85, 0.9, 0.95]:
+                    Compute precision and recall at each example
+                    for r in 0, 0.1, 0.2, ..., 1:
+                        find precision at r as max(prec) at recall >= r
+                    average all 11 precisions -> average precision at detection_iou
+                average all aps -> average precision
+            average over all clases -> mean average precision
+        """
+        from skimage import measure
+        import itertools
+        import bisect
+
         print('Evaluating', key)
 
         # Get model
         net = train.TrainedModel.load_model(key)
-
-        # Move model to GPU
         net.cuda()
         net.eval()
 
-        # true negatives = 0
-        pass
+        # Get dataset
+        examples = (train.Split() & key).fetch1('{}_examples'.format(key['set']))
+        enhance_input = (params.TrainingParams() & key).fetch1('enhanced_input')
+        dataset = datasets.SegmentationDataset(examples, transforms.ContrastNorm(),
+                                               enhance_input, binarize_labels=False)
+        dataloader = DataLoader(dataset, num_workers=2, pin_memory=True)
 
-    """ mAP as computed by COCO:
-        for each class
-            for each image
-                Predict k bounding boxes and k confidences
-                Order by decreasing confidence
-                for each bbox
-                    for each acceptance_iou in [0.5, 0.55, 0.6, ..., 0.85, 0.9, 0.95]
-                        Find the highest IOU ground truth box that has not been assigned yet
-                        if highest iou > acceptance_iou
-                            Save whether bbox is a match (and with whom it matches)
-                    accum results over all acceptance ious
-                accum results over all bboxes
-            accum results over all images
+        # Accumulate true positives, false positives and false negatives over images
+        acceptance_ious = np.arange(0.5, 1, 0.05)
+        num_gt_instances = 0 # number of ground truth instances
+        num_pred_instances = 0 # number of predicted masks
+        confidences = [] # confidence per predicted mask
+        tps = np.empty([len(acceptance_ious), 0], dtype=bool) # ious x masks, whether mask is a match
+        for image, label in dataloader:
+            # Create heatmap of predictions
+            with torch.no_grad():
+                output = forward_on_big_input(net, image.cuda())
+                prediction = F.softmax(output, dim=1) # 1 x num_classes x depth x height x width
 
-            Reorder by decreasing confidence
-            for each acceptance_iou in [0.5, 0.55, 0.6, ..., 0.85, 0.9, 0.95]:
-                Compute precision and recall at each example
-                for r in 0, 0.1, 0.2, ..., 1:
-                    find precision at r as max(prec) at recall >= r
-                average all 11 precisions -> average precision at detection_iou
-            average all aps -> average precision
-        average over all clases -> mean average precision
-    """
+                pred = prediction[0, 1].cpu().numpy()
+                label = label[0].numpy()
 
-def _prob2labels(pred):
-    """ Transform voxelwise probabilities from a segmentation to instances.
+            # Create instance segmentation
+            segmentation = _prob2labels(pred) # labels start at 1 and are sequential
+            probs = [p.mean_intensity for p in measure.regionprops(segmentation, pred)]
 
-    Pretty ad hoc. Bunch of numbers were manually chosen.
+            # Match each predicted mask
+            mask_tps = np.zeros([len(acceptance_ious), segmentation.max()], dtype=bool)
+            gt_tps = np.zeros([len(acceptance_ious), label.max()], dtype=bool)
+            for _, mask_idx in sorted(zip(probs, itertools.count(1)), reverse=True):
+                matches = find_matches(label, segmentation == mask_idx)
+                for iou, match in sorted(matches, reverse=True):
+                    is_acceptable = iou > acceptance_ious
+                    is_unassigned = np.logical_and(~gt_tps[:, match - 1],
+                                                   ~mask_tps[:, mask_idx - 1])
+                    mask_tps[:, mask_idx - 1] = np.logical_and(is_acceptable, is_unassigned)
+                    gt_tps[:, match - 1] = np.logical_and(is_acceptable, is_unassigned)
 
-    Arguments:
-        pred: Array with predicted probabilities.
+            # Accumulate results
+            num_gt_instances += label.max()
+            num_pred_instances += segmentation.max()
+            confidences.extend(probs)
+            tps = np.concatenate([tps, mask_tps], axis=1)
 
-    Returns:
-        Array with same shape as pred with zero for background and positive integers for
-            each predicted instance.
-    """
-    from skimage import filters, feature, morphology, measure, segmentation
-    from scipy import ndimage
+        # Compute precision and recall at each prediction point (after sorting by confidence)
+        tps = tps[:, np.argsort(confidences)[::-1]]
+        precision = np.cumsum(tps, 1) / np.arange(1, num_pred_instances + 1)
+        recall = np.cumsum(tps, 1) / num_gt_instances
 
-    # Find good binary threshold (may be a bit lower than best possible IOU, catches true cells that weren't labeled)
-    thresh = filters.threshold_otsu(pred)
+        # Add precisions at recall 0 and 1
+        recall = np.concatenate([np.zeros((10, 1)), recall, np.ones((10, 1))], axis=1)
+        precision = np.concatenate([precision[:, :1], precision, np.zeros((10, 1))], axis=1)
 
-    # Find local maxima in the prediction heatmap
-    smooth_pred = ndimage.gaussian_filter(pred, 1)
-    peaks = feature.peak_local_max(smooth_pred, min_distance=4, threshold_abs=thresh,
-                                   indices=False)
-    markers = morphology.label(peaks)
+        # Make sure precision increases monotonically (from right to left)
+        precision = np.maximum.accumulate(precision[:, ::-1], 1)[:, ::-1]
 
-    # Separate into instances based on distance
-    thresholded = pred > thresh
-    filled = morphology.remove_small_objects(morphology.remove_small_holes(thresholded), 65) # volume of sphere with diameter 5
-    distance = ndimage.distance_transform_edt(filled)
-    distance += 1e-7 * np.random.random(distance.shape) # to break ties
-    label = morphology.watershed(-distance, markers, mask=filled)
-    print(label.max(), 'initial cells')
+        # Compute mAP (area under the precision recall curve)
+        ap_precisions = [[p[bisect.bisect_left(r, i)]  for i in np.linspace(0, 1, 11)]
+                         for p, r in zip(precision, recall)]
+        aps = np.mean(ap_precisions, axis=1) # per acceptance iou
+        mAP = np.mean(aps)
 
-    # Remove masks that are too small or too large
-    label = morphology.remove_small_objects(label, 65)
-    too_large = [p.label for p in measure.regionprops(label) if p.area > 4189]
-    for label_id in too_large:
-        label[label == label_id] = 0 # set to background
-    label, _, _ = segmentation.relabel_sequential(label)
-    print(label.max(), 'final cells')
+        # Compute other metrics
+        tp, fp, tn, fn = (tps.sum(1), num_pred_instances - tps.sum(1), 0,
+                          num_gt_instances - tps.sum(1))
+        metrics = compute_metrics(tp, fp, tn, fn)
 
-    return label
-
-
-def find_matches(labels, prediction):
-    """ Find all labels that intersect with a given predicted mask.
-
-    Arguments:
-        labels: Array with zeros for background and positive integers for each ground
-            truth object in the volume.
-        prediction: Boolean array with ones for the predicted mask. Same shape as labels.
-
-    Returns:
-        List of (label, iou) pairs sorted by decreasing IOU.
-    """
-    ious = []
-    for l in np.unique(labels[prediction]):
-        label = labels == l
-        iou = np.sum(np.logical_and(label, prediction)) / np.sum(np.logical_or(label, prediction))
-        ious.append((l, iou))
-    ious = sorted(ious, key=lambda x: x[1], reverse=True)
-
-    return ious
+        # Insert
+        self.insert1({**key, 'map': mAP, 'mf1': metrics[1].mean(), 'ap_50': aps[0],
+                      'ap_75': aps[5], 'f1_50': metrics[1][0], 'f1_75': metrics[1][5]})
+        for (iou, ap_precisions_, ap, tp_, fp_, fn_, _, f1, accuracy, _, _, precision,
+             recall) in zip(acceptance_ious, ap_precisions, aps, tp, fp, fn, *metrics):
+            self.PerIOU().insert1({**key, 'iou': iou, 'ap_precisions': ap_precisions_,
+                                   'ap': ap, 'tps': tp_, 'fps': fp_, 'fns': fn_,
+                                   'accuracy': accuracy, 'precision': precision,
+                                   'recall': recall, 'f1': f1})
 
 
 def forward_on_big_input(net, volume, max_size=256, padding=32, out_channels=2):
@@ -349,4 +365,69 @@ def compute_metrics(true_positive, false_positive, true_negative, false_negative
     iou = true_positive / (true_positive + false_positive + false_negative + epsilon)
     f1 = (2 * precision * recall) / (precision + recall + epsilon)
 
-    return (iou, f1, accuracy, sensitivity, specificity, precision, recall)
+    return iou, f1, accuracy, sensitivity, specificity, precision, recall
+
+
+def _prob2labels(pred):
+    """ Transform voxelwise probabilities from a segmentation to instances.
+
+    Pretty ad hoc. Bunch of numbers were manually chosen.
+
+    Arguments:
+        pred: Array with predicted probabilities.
+
+    Returns:
+        Array with same shape as pred with zero for background and positive integers for
+            each predicted instance.
+    """
+    from skimage import filters, feature, morphology, measure, segmentation
+    from scipy import ndimage
+
+    # Find good binary threshold (may be a bit lower than best possible IOU, catches true cells that weren't labeled)
+    thresh = filters.threshold_otsu(pred)
+
+    # Find local maxima in the prediction heatmap
+    smooth_pred = ndimage.gaussian_filter(pred, 0.7)
+    peaks = feature.peak_local_max(smooth_pred, min_distance=4, threshold_abs=thresh,
+                                   indices=False)
+    markers = morphology.label(peaks)
+
+    # Separate into instances based on distance
+    thresholded = smooth_pred > thresh
+    filled = morphology.remove_small_objects(morphology.remove_small_holes(thresholded), 65) # volume of sphere with diameter 5
+    distance = ndimage.distance_transform_edt(filled)
+    distance += 1e-7 * np.random.random(distance.shape) # to break ties
+    label = morphology.watershed(-distance, markers, mask=filled)
+    print(label.max(), 'initial cells')
+
+    # Remove masks that are too small or too large
+    label = morphology.remove_small_objects(label, 65)
+    too_large = [p.label for p in measure.regionprops(label) if p.area > 4189]
+    for label_id in too_large:
+        label[label == label_id] = 0 # set to background
+    label, _, _ = segmentation.relabel_sequential(label)
+    print(label.max(), 'final cells')
+
+    return label
+
+
+def find_matches(labels, prediction):
+    """ Find all labels that intersect with a given predicted mask (and their IOUs).
+
+    Arguments:
+        labels: Array with zeros for background and positive integers for each ground
+            truth object in the volume.
+        prediction: Boolean array with ones for the predicted mask. Same shape as labels.
+
+    Returns:
+        List of (iou, label) pairs.
+    """
+    res = []
+    for m in np.delete(np.unique(labels[prediction]), 0):
+        label = labels == m
+        union = np.logical_or(label, prediction)
+        intersection = np.logical_and(label[union], prediction[union]) # bit faster
+        iou = np.count_nonzero(intersection) / np.count_nonzero(union)
+        res.append((iou, m))
+
+    return res
