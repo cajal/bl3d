@@ -9,6 +9,7 @@ torch.backends.cudnn.benchmark=True # faster: 30secs vs 96 secs per epoch (witho
 from bl3d import train, evaluate
 train.TrainedModel().populate('model_hash LIKE "fcn_9%%"', reserve_jobs=True)
 evaluate.SegmentationMetrics().populate(reserve_jobs=True)
+evaluate.DetectionMetrics().populate(reserve_jobs=True)
 
 
 ####################################################################################
