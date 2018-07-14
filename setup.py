@@ -3,13 +3,13 @@ from setuptools import setup
 
 setup(
     name='bl3d',
-    version='0.0.2',
+    version='0.1.0',
     description='Cell segmentation in 3D GCaMP structural recordings',
     author='Erick Cobos',
     author_email='ecobos@bcm.edu',
     license='MIT',
     url='https://github.com/cajal/bl3d',
-    keywords= '2p 3d GCaMPs soma segmentation',
+    keywords= '2p 3d GCaMPs soma segmentation stack',
     packages=['bl3d'],
     install_requires=['torch', 'numpy', 'scipy', 'scikit-image', 'datajoint',],
     classifiers=[

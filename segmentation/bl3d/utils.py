@@ -79,7 +79,7 @@ def memusage():
             pass # other non-tensor objects
 
 
-def lcn(image, sigmas=(12, 12)):
+def lcn(image, sigmas=(7, 7)):
     """ Local contrast normalization.
 
     Normalize each pixel using mean and stddev computed on a local neighborhood.
@@ -89,15 +89,15 @@ def lcn(image, sigmas=(12, 12)):
     Equivalent using a hard defintion of neighborhood will be:
         local_mean = ndimage.uniform_filter(image, size=(32, 32))
 
-    :param np.array image: Array with raw two-photon images.
-    :param tuple sigmas: List with sigmas per axes to use for the gaussian filter.
-        Smaller values result in more local neighborhoods. 15-30 microns should work fine
+    Arguments:
+        image: Array with raw two-photon images.
+        sigmas: List with sigmas per axes to use for the gaussian filter. Smaller values
+            result in more local neighborhoods. 15-30 microns should work fine
     """
     from scipy import ndimage
 
     local_mean = ndimage.gaussian_filter(image, sigmas)
-    local_std = np.sqrt(ndimage.gaussian_filter(image ** 2, sigmas) -
-                        ndimage.gaussian_filter(image, sigmas) ** 2)
+    local_std = np.sqrt(ndimage.gaussian_filter((image - local_mean)**2, sigmas))
     norm = (image - local_mean) / (local_std + 1e-7)
 
     return norm
