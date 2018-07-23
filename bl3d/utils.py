@@ -1,23 +1,6 @@
 """ Some utility functions. """
 import numpy as np
 
-def list_hash(items):
-    """ Compute the MD5 digest hash for a list.
-
-    Arguments:
-        items: List of items to hash
-
-    Returns:
-        A string. Hash created from items.
-    """
-    import hashlib
-
-    hashed = hashlib.md5()
-    for item in items:
-        hashed.update(str(item).encode())
-
-    return hashed.hexdigest()
-
 
 def create_video(stack, interval=100, repeat_delay=1000):
     """ Create an animation of the stack. Fly-through depth axis.
