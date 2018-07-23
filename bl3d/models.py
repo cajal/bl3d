@@ -9,7 +9,7 @@ def init_conv(modules):
     """ Initializes all module weights using He initialization and set biases to zero."""
     for module in modules:
         nn.init.kaiming_normal_(module.weight)
-        if module.bias:
+        if module.bias is not None:
             nn.init.constant_(module.bias, 0)
 
 def init_bn(modules):
@@ -35,22 +35,23 @@ class DenseNet(nn.Module):
 
     def __init__(self):
         super().__init__()
-        self.conv1 = nn.Conv3d(1, 8, 3, padding=1, bias=False)
+        self.conv1 = nn.Conv3d(1, 8, 3, bias=False)
         self.bn1 = nn.BatchNorm3d(9)
-        self.conv2 = nn.Conv3d(9, 8, 3, padding=1, bias=False)
+        self.conv2 = nn.Conv3d(9, 8, 3, bias=False)
         self.bn2 = nn.BatchNorm3d(17)
-        self.conv3 = nn.Conv3d(17, 8, 3, padding=2, dilation=2, bias=False)
+        self.conv3 = nn.Conv3d(17, 8, 3, dilation=2, bias=False)
         self.bn3 = nn.BatchNorm3d(25)
-        self.conv4 = nn.Conv3d(25, 8, 3, padding=2, dilation=2, bias=False)
+        self.conv4 = nn.Conv3d(25, 8, 3, dilation=2, bias=False)
         self.bn4 = nn.BatchNorm3d(33)
-        self.conv5 = nn.Conv3d(33, 8, 3, padding=3, dilation=3)
+        self.conv5 = nn.Conv3d(33, 8, 3, dilation=3)
 
     def forward(self, input_):
-        h1 = torch.cat([input_, self.conv1(input_)], 1)
-        h2 = torch.cat([h1, self.conv2(F.relu(self.bn1(h1), in_place=True))], 1)
-        h3 = torch.cat([h2, self.conv3(F.relu(self.bn2(h2), in_place=True))], 1)
-        h4 = torch.cat([h3, self.conv4(F.relu(self.bn3(h3), in_place=True))], 1)
-        h5 = torch.cat([h4, self.conv5(F.relu(self.bn4(h4), in_place=True))], 1)
+        padded = F.pad(input_, (9,) * 6, mode='replicate')
+        h1 = torch.cat([padded[..., 1:-1, 1:-1, 1:-1], self.conv1(padded)], 1)
+        h2 = torch.cat([h1[..., 1:-1, 1:-1, 1:-1], self.conv2(F.relu(self.bn1(h1), inplace=True))], 1)
+        h3 = torch.cat([h2[..., 2:-2, 2:-2, 2:-2], self.conv3(F.relu(self.bn2(h2), inplace=True))], 1)
+        h4 = torch.cat([h3[..., 2:-2, 2:-2, 2:-2], self.conv4(F.relu(self.bn3(h3), inplace=True))], 1)
+        h5 = torch.cat([h4[..., 3:-3, 3:-3, 3:-3], self.conv5(F.relu(self.bn4(h4), inplace=True))], 1)
         return h5
 
     def init_parameters(self):
@@ -73,21 +74,30 @@ class RPN(nn.Module):
 
     def __init__(self):
         super().__init__()
-        self.conv1 = nn.Conv3d(41, 48, 3, padding=3, dilation=3, bias=False)
+        self.conv1 = nn.Conv3d(41, 48, 3, dilation=3, bias=False)
         self.bn1 = nn.BatchNorm3d(48)
         self.fc1 = nn.Conv3d(48, 64, 1, bias=False)
         self.bn2 = nn.BatchNorm3d(64)
         self.fc2 = nn.Conv3d(64, 7, 1)
 
     def forward(self, input_):
-        a1 = F.relu(self.bn1(self.conv1(input_)), in_place=True)
-        a2 = F.relu(self.bn2(self.fc1(a1)), in_place=True)
+        padded = F.pad(input_, (3,) * 6, mode='replicate')
+        a1 = F.relu(self.bn1(self.conv1(padded)), inplace=True)
+        a2 = F.relu(self.bn2(self.fc1(a1)), inplace=True)
         out = self.fc2(a2)
         return out[:, 0], out[:, 1:]
 
     def init_parameters(self):
-        init_conv([self.conv1, self.fc1, self.fc2])
+        init_conv([self.conv1, self.fc1])
         init_bn([self.bn1, self.bn2])
+
+        # Initialize last fuly connected layer to keep bbox predictions close to zero
+        nn.init.kaiming_normal_(self.fc2.weight[:1])
+        nn.init.normal_(self.fc2.weight[1:], mean=0, std=0.01)
+        #nn.init.normal_(self.fc2.weight[1:], mean=0, std=0.1*np.sqrt(2/self.fc2.weight.shape[1]))
+        nn.init.constant_(self.fc2.bias, 0)
+
+
 
 
 class Bbox(nn.Module):
@@ -107,28 +117,33 @@ class Bbox(nn.Module):
 
     def __init__(self):
         super().__init__()
-        self.conv1 = nn.Conv3d(41, 64, 3, padding=1, bias=False)
+        self.conv1 = nn.Conv3d(41, 64, 3, bias=False)
         self.bn1 = nn.BatchNorm3d(64)
-        self.conv2 = nn.Conv3d(64, 64, 3, padding=1, stride=2, bias=False) # 2x downsampling
+        self.conv2 = nn.Conv3d(64, 64, 3, stride=2, bias=False) # 2x downsampling
         self.bn2 = nn.BatchNorm3d(64)
-        self.conv3 = nn.Conv3d(64, 64, 3, padding=1, bias=False)
+        self.conv3 = nn.Conv3d(64, 64, 3, bias=False)
         self.bn3 = nn.BatchNorm1d(64)
         self.fc1 = nn.Linear(64, 128, bias=False)
-        self.bn3 = nn.BatchNorm1d(128)
+        self.bn4 = nn.BatchNorm1d(128)
         self.fc2 = nn.Linear(128, 7)
 
     def forward(self, input_):
-        a1 = F.relu(self.bn1(self.conv1(input_)), in_place=True)
-        a2 = F.relu(self.bn2(self.conv2(a1)), in_place=True)
+        a1 = F.relu(self.bn1(self.conv1(input_)), inplace=True)
+        a2 = F.relu(self.bn2(self.conv2(a1)), inplace=True)
         h3 = torch.mean(self.conv3(a2).view(*a2.shape[:2], -1), dim=-1) # global average pooling
-        a3 = F.relu(self.bn3(h3), in_place=True)
-        a4 = F.relu(self.bn4(self.fc1(a3)), in_place=True)
+        a3 = F.relu(self.bn3(h3), inplace=True)
+        a4 = F.relu(self.bn4(self.fc1(a3)), inplace=True)
         out = self.fc2(a4)
         return out[:, 0], out[:, 1:]
 
     def init_parameters(self):
-        init_conv([self.conv1, self.conv2, self.conv3, self.fc1, self.fc2])
+        init_conv([self.conv1, self.conv2, self.conv3, self.fc1])
         init_bn([self.bn1, self.bn2, self.bn3, self.bn4])
+
+        # Initialize last fuly connected layer to keep initial bboxes close to anchors
+        nn.init.kaiming_normal_(self.fc2.weight[:1])
+        nn.init.normal_(self.fc2.weight[1:], mean=0, std=0.01)
+        nn.init.constant_(self.fc2.bias, 0)
 
 
 class FCN(nn.Module):
@@ -147,24 +162,25 @@ class FCN(nn.Module):
 
     def __init__(self):
         super().__init__()
-        self.conv1 = nn.Conv3d(41, 64, 3, padding=1, bias=False)
+        self.conv1 = nn.Conv3d(41, 64, 3, bias=False)
         self.bn1 = nn.BatchNorm3d(64)
-        self.conv2 = nn.Conv3d(64, 64, 3, padding=1, bias=False)
+        self.conv2 = nn.Conv3d(64, 64, 3, bias=False)
         self.bn2 = nn.BatchNorm3d(64)
-        self.conv3 = nn.Conv3d(64, 96, 3, padding=2, dilation=2, bias=False)
-        self.bn3 = nn.BatchNorm1d(96)
-        self.conv4 = nn.Conv3d(96, 96, 3, padding=2, dilation=2, bias=False)
+        self.conv3 = nn.Conv3d(64, 96, 3, dilation=2, bias=False)
+        self.bn3 = nn.BatchNorm3d(96)
+        self.conv4 = nn.Conv3d(96, 96, 3, dilation=2, bias=False)
         self.bn4 = nn.BatchNorm3d(96)
         self.fc1 = nn.Conv3d(96, 128, 1, bias=False)
         self.bn5 = nn.BatchNorm3d(128)
         self.fc2 = nn.Conv3d(128, 1, 1)
 
     def forward(self, input_):
-        a1 = F.relu(self.bn1(self.conv1(input_)), in_place=True)
-        a2 = F.relu(self.bn2(self.conv2(a1)), in_place=True)
-        a3 = F.relu(self.bn3(self.conv3(a2)), in_place=True)
-        a4 = F.relu(self.bn4(self.conv4(a3)), in_place=True)
-        a5 = F.relu(self.bn5(self.fc1(a4)), in_place=True)
+        padded = F.pad(input_, (6,) * 6, mode='replicate')
+        a1 = F.relu(self.bn1(self.conv1(padded)), inplace=True)
+        a2 = F.relu(self.bn2(self.conv2(a1)), inplace=True)
+        a3 = F.relu(self.bn3(self.conv3(a2)), inplace=True)
+        a4 = F.relu(self.bn4(self.conv4(a3)), inplace=True)
+        a5 = F.relu(self.bn5(self.fc1(a4)), inplace=True)
         out = self.fc2(a5)
         return out[:, 0]
 
@@ -185,8 +201,8 @@ class MaskRCNN(nn.Module):
     Arguments:
         anchor_size: Int or triplet. Size of the anchors used to create the labels.
         roi_size: Int or triplet. Size of the ROIs sent to the bbox and mask branch.
-        nms_iou: Threshold for non-maximum suppression: if two masks have a an IOU higher
-            than this, the one with lowest objectness score will be ignored.
+        nms_iou: Threshold for non-maximum suppression: if two bboxes have a an IOU
+            higher than this, the one with lowest objectness score will be ignored.
         num_proposals: Number of proposals from the RPN that will go through the bbox
             refinement branch and mask branch. This changes during evaluation; see
             forward_eval().
@@ -200,10 +216,11 @@ class MaskRCNN(nn.Module):
         self.bbox = Bbox()
         self.fcn = FCN()
 
-        self.anchor_size = anchor_size
+        self.anchor_size = (anchor_size if isinstance(anchor_size, tuple) else
+                            (anchor_size, ) * 3)
+        self.roi_size = roi_size if isinstance(roi_size, tuple) else (roi_size, ) * 3
         self.nms_iou = nms_iou
         self.num_proposals = num_proposals # used only for training
-        self.roi_size = roi_size
 
     def forward(self, input_):
         """ Forward used during training.
@@ -226,8 +243,9 @@ class MaskRCNN(nn.Module):
 
         # Get top-k proposals (after NMS)
         scores, proposals = self.rpn(hidden)
-        abs_proposals = deparametrize_rpn_proposals(proposals.cpu().numpy(), self.anchor_size)
-        _, top_proposals = non_maximum_suppression(abs_proposals, scores.cpu().numpy(),
+        abs_proposals = deparametrize_rpn_proposals(proposals.detach().cpu().numpy(),
+                                                    self.anchor_size)
+        _, top_proposals = non_maximum_suppression(abs_proposals, scores.detach().cpu().numpy(),
                                                    self.nms_iou, stop_after=self.num_proposals)
 
         # ROI align
@@ -275,31 +293,33 @@ class MaskRCNN(nn.Module):
         hidden = forward_on_big_input(self.core, input_, block_size, padding,
                                       out_channels=41)
 
-        #TODO: forward on big input rpn (need to deal with dual output)
         # Get top-k proposals (after NMS)
         scores, proposals = self.rpn(hidden) # n x d x h x w, n x 6 x d x h x w
-        abs_proposals = deparametrize_rpn_proposals(proposals.cpu().numpy(), self.anchor_size)
-        _, top_proposals = non_maximum_suppression(abs_proposals, scores.cpu().numpy(),
+        abs_proposals = deparametrize_rpn_proposals(proposals.detach().cpu().numpy(),
+                                                    self.anchor_size)
+        _, top_proposals = non_maximum_suppression(abs_proposals, scores.detach().cpu().numpy(),
                                                    self.nms_iou, stop_after=eval_proposals)
 
         # ROI align
-        roi_features = roi_align(hidden, top_proposals[0], self.roi_size) # NROIS x C x D x H x W
+        roi_features = roi_align(hidden, top_proposals[0], self.roi_size)
 
         # Refine bbox
-        probs, bboxes = self.bbox(roi_features)
+        probs, bboxes = self.bbox(roi_features) # NROIS, NROIS x 6
 
         # Get top-k bboxes
-        abs_bboxes = _deparametrize_bboxes(bboxes.cpu().numpy(), zyx=top_proposals[0, :, :3],
-                                           dhw=top_proposals[0, :, 3:])
-        top_probs, top_bboxes = non_maximum_suppression(abs_bboxes, probs.cpu().numpy(),
-                                                        nms_iou=self.nms_iou, stop_after=eval_masks)
+        abs_bboxes = _deparametrize_bboxes(bboxes.detach().cpu().numpy(),
+                                           zyx=top_proposals[0][:, :3],
+                                           dhw=top_proposals[0][:, 3:])
+        top_probs, top_bboxes = non_maximum_suppression(np.expand_dims(abs_bboxes.T, 0),
+                                                        np.expand_dims(probs.detach().cpu().numpy(), 0),
+                                                        self.nms_iou, stop_after=eval_masks)
         bbox_features = roi_align(hidden, top_bboxes[0], self.roi_size)
 
         # Segment
-        masks = self.fcn(bbox_features)
-        top_masks = quantize_masks(masks.cpu().numpy(), top_bboxes[0])
+        masks = self.fcn(bbox_features) #TODO: Run in batches if it overflows memory
+        top_masks = quantize_masks(masks.detach().cpu().numpy(), top_bboxes)
 
-        return top_probs[0], top_bboxes[0], top_masks
+        return top_probs, top_bboxes, top_masks
 
 
 def deparametrize_rpn_proposals(bboxes, anchor_size):
@@ -330,18 +350,18 @@ def _deparametrize_bboxes(bboxes, zyx, dhw):
     Arguments:
         bboxes: A (N x 6 x d1 x d2 x ...) array with bbox coordinates in the second
             dimension.
-        zyx: An array ([1|N] x 3 x d1 x d2 x ...) with the z, y, x coordinates of the anchors used to parametrize the
-            bboxes. Has to be broadcastable with bboxes array.
+        zyx: An array ([1|N] x 3 x d1 x d2 x ...) with the z, y, x coordinates of the
+            anchors used to parametrize the bboxes. Broadcastable with bboxes array.
         dhw: An array with the d, h, w dimensions of the anchors used to parametrize the
             bboxes. Has to be broadcastable with bboxes array.
 
     Returns:
-        abs_bboxes: Array of same shape as input with absolute/ coordinates.
+        abs_bboxes: Array of same shape as input with absolute coordinates.
     """
     # Deparametrize bbox coordinates
     abs_bboxes = np.empty_like(bboxes)
     abs_bboxes[:, :3] = bboxes[:, :3] * dhw + zyx
-    abs_bboxes[:, 3:] = np.exp(bboxes[:, :3]) / dhw
+    abs_bboxes[:, 3:] = np.exp(bboxes[:, 3:]) * dhw
 
     return abs_bboxes
 
@@ -366,19 +386,15 @@ def non_maximum_suppression(bboxes, scores, nms_iou=0.5, stop_after=5000):
         one_bboxes = one_bboxes.reshape((6, -1)).T # N x 6
         one_scores = one_scores.ravel()
 
-        # In descending score, save the good bboxes and discard the overlapping ones
+        # Save the highest nonoverlapping bboxes
         top_indices = []
-        discarded_bboxes = np.zeros(one_scores.shape, dtype=bool)
         for next_index in np.argsort(one_scores)[::-1]:
-            if not discarded_bboxes[next_index]:
+            ious = _compute_ious(one_bboxes[next_index], one_bboxes[top_indices])
+            if np.all(ious < nms_iou):
                 # Save it
                 top_indices.append(next_index)
                 if len(top_indices) >= stop_after:
                     break
-
-                # Discard any bbox that overlaps highly with it
-                ious = _compute_ious(one_bboxes[next_index], one_bboxes)
-                discarded_bboxes[ious > nms_iou] = True
 
         nms_scores.append(one_scores[top_indices])
         nms_bboxes.append(one_bboxes[top_indices])
@@ -391,15 +407,20 @@ def _compute_ious(bbox, bboxes):
 
     Arguments:
         bbox: Sixtuple: (z, y, x, d, h, w)
-        bboxes: NROIS x 6 array. N bboxes.
+        bboxes: N x 6 array. N bboxes.
 
     Returns:
-        ious: An array of size NROIS with the iou between bbox and every bbox in bboxes.
+        ious: An array of size N with the iou between bbox and every bbox in bboxes.
     """
+    # Compute overlap in each dimension
     first_coord = np.maximum(bbox[:3] - bbox[3:] / 2, bboxes[:, :3] - bboxes[:, 3:] / 2)
     last_coord = np.minimum(bbox[:3] + bbox[3:] / 2, bboxes[:, :3] + bboxes[:, 3:] / 2)
-    overlap = np.clip(last_coord - first_coord, a_min=0, a_max=None) # when last_index was after first index
-    ious = np.prod(overlap, axis=-1) / (np.prod(bbox[3:]) + np.prod(bboxes[:, 3:], axis=-1))
+    overlap = np.maximum(last_coord - first_coord, 0) # when last_index was after first index
+
+    # Compute ious
+    intersection = np.prod(overlap, axis=-1)
+    union = np.prod(bboxes[:, 3:], axis=-1) + np.prod(bbox[3:]) - intersection
+    ious = intersection / union
 
     return ious
 
@@ -425,8 +446,9 @@ def roi_align(features, bboxes, roi_size):
     high_sample = bboxes[:, :3] + bboxes[:, 3:] / 2 - bboxes[:, 3:] / (4 * roi_size) # N x 3
 
     # Reparametrize to be between [-1, 1] (as needed for F.grid_sampler)
-    low_gs = (2 * low_sample - features.shape[-3:]) / (features.shape[-3:] - 1)
-    high_gs = (2 * high_sample - features.shape[-3:]) / (features.shape[-3:] -1)
+    volume_dhw = np.array(features.shape[-3:])
+    low_gs = (2 * low_sample - volume_dhw) / (volume_dhw - 1)
+    high_gs = (2 * high_sample - volume_dhw) / (volume_dhw - 1)
 
     # Create grids
     grids = np.empty((len(bboxes), *(2 * roi_size), 3))
@@ -435,7 +457,7 @@ def roi_align(features, bboxes, roi_size):
         grids[i] = np.stack(np.meshgrid(*coords, indexing='ij'), axis=-1)
 
     # Sample the grid and pool
-    grids = torch.from_numpy(np.expand_dims(grids, 1)) # NROIS x 1 x R1 x R2 x R3 x 3
+    grids = torch.FloatTensor(np.expand_dims(grids, 1)).to(features.device) # NROIS x 1 x 2*R1 x 2*R2 x 2*R3 x 3
     roi_features = torch.cat([F.grid_sample(features, g) for g in grids])
     roi_features = F.avg_pool3d(roi_features, 2)
 
@@ -490,7 +512,8 @@ def forward_on_big_input(net, volume, block_size=256, padding=32, out_channels=1
         out = net(chunk)
 
         # Assign to output dropping padded amount (special treatment for first chunk)
-        output_slices = [slice(0 if sl.start == 0 else c, sl.stop) for c, sl in zip(initial_coords, cut_slices)]
+        output_slices = [slice(0 if sl.start == 0 else c, sl.stop) for c, sl in
+                         zip(initial_coords, cut_slices)]
         out_slices = [slice(0 if sl.start == 0 else p, None) for p, sl in zip(padding, cut_slices)]
         output[(..., *output_slices)] = out[(..., *out_slices)]
 
@@ -500,8 +523,10 @@ def forward_on_big_input(net, volume, block_size=256, padding=32, out_channels=1
 def quantize_masks(masks, bboxes):
     """ Resample masks to match original quantization.
 
-    We sample voxels at each .5 step; for instance, if the box goes from 3.2 to 4.7, the
-    mask will be sampled at position 3.5 and 4.5 (thus the output will have size 2).
+    We sample voxels at each .5 step. For instance:
+        If the box goes from 3.2 to 4.7, the mask will be sampled at position 3.5 and 4.5
+        If the box goes from 3.6 to 4.2, the mask will be an empty array (because no 0.5
+        is intersected).
 
     Arguments:
         masks: An array (N x D x H x W). Masks.
@@ -515,7 +540,7 @@ def quantize_masks(masks, bboxes):
     # Create sample coordinates (12.5, 13.5, ..., 21.5)
     low_sample = np.round(bboxes[:, :3] - bboxes[:, 3:] / 2 + 1e-7) + 0.5 # 0.5-1.5 -> 1.5, 1.5-2.5->2.5, ...
     high_sample = np.round(bboxes[:, :3] + bboxes[:, 3:] / 2 + 1e-7) - 0.5 # 0.5-1.5 -> 0.5, 1.5-2.5-> 1.5
-    num_samples = np.ceil(bboxes[:, 3:])
+    num_samples = np.round(high_sample - low_sample + 1).astype(int)
 
     # Convert sample coordinates into input to map_coordinates
     roi_size = np.array(masks.shape[1:])
