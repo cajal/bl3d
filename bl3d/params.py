@@ -31,17 +31,18 @@ class TrainingParams(dj.Lookup):
     lr_decay:           float           # factor multiplying learning rate when decreasing
     lr_schedule:        tinyblob        # epochs after which learning rate will be decreased
     positive_weight:    float           # relative weight for RPN positive class examples (negative class weight is 1)
+    smoothl1_weight:    float           # weight given to the smooth-l1 loss component of the RPN and bbox loss
     """
     @property
     def contents(self):
         import itertools
-        search_params = itertools.product([0.001, 0.01, 0.1], [1e-5, 1e-4, 1e-3])
-        for id_, (lr, lambda_) in enumerate(search_params, start=1):
+        search_params = itertools.product([0.001, 0.01, 0.1], [1e-5, 1e-4, 1e-3], [1, 10])
+        for id_, (lr, lambda_, sl1_weight) in enumerate(search_params, start=1):
             yield {'training_id': id_, 'learning_rate': lr, 'weight_decay': lambda_,
-                   'seed': 1234, 'crop_size': 128, 'enhanced_input': False,
-                   'anchor_size_d': 15, 'anchor_size_w': 9, 'anchor_size_h': 9,
-                   'num_proposals': 1024, 'nms_iou': 0.5, 'roi_size_d': 14,
-                   'roi_size_h': 14, 'roi_size_w': 14, 'momentum': 0.9,
+                   'smoothl1_weight': sl1_weight, 'seed': 1234, 'crop_size': 128,
+                   'enhanced_input': False, 'anchor_size_d': 15, 'anchor_size_w': 9,
+                   'anchor_size_h': 9, 'num_proposals': 1024, 'nms_iou': 0.5,
+                   'roi_size_d': 14, 'roi_size_h': 14, 'roi_size_w': 14, 'momentum': 0.9,
                    'num_epochs': 140, 'lr_decay': 0.1, 'lr_schedule': (100, ),
                    'positive_weight': 5}
 
@@ -77,8 +78,7 @@ class DenseNet(dj.Lookup):
     use_batchnorm:      boolean         # whether to use batch normalization
     """
     contents = [
-        [1, 5, 8, (3, 3, 3, 3, 3), (1, 1, 2, 2, 3), (1, 1, 2, 2, 3), (1, 1, 1, 1, 1),
-         True]
+        [1, 5, 8, (3, 3, 3, 3, 3), (1, 1, 2, 2, 3), (1, 1, 1, 1, 1), True]
     ]
 
 
@@ -96,7 +96,7 @@ class RPN(dj.Lookup):
     use_batchnorm:      boolean         # whether to use batch normalization
     """
     contents = [
-        [1, (48, 64, 7), (3, 1, 1), (3, 0, 0), (1, 1, 1), True]
+        [1, (48, 64, 7), (3, 1, 1), (3, 1, 1), (1, 1, 1), True]
     ]
 
 
@@ -115,7 +115,7 @@ class Bbox(dj.Lookup):
     use_batchnorm:      boolean         # whether to use batch normalization
     """
     contents = [
-        [1, (64, 64, 64, 128, 7), 3, (3, 3, 3), (1, 1, 1), (1, 1, 1), (1, 2, 1), True]
+        [1, (64, 64, 64, 128, 7), 3, (3, 3, 3), (1, 1, 1), (1, 2, 1), True]
     ]
 
 
@@ -134,7 +134,7 @@ class FCN(dj.Lookup):
     """
     contents = [
         [1, (64, 64, 96, 96, 128, 1), (3, 3, 3, 3, 1, 1), (1, 1, 2, 2, 1, 1),
-         (1, 1, 2, 2, 0, 0), (1, 1, 1, 1, 1, 1), True]
+         (1, 1, 1, 1, 1, 1), True]
     ]
 
 
@@ -161,7 +161,7 @@ class TrainingSplit(dj.Lookup):
 
 @schema
 class EvalParams(dj.Lookup):
-    definition=""" Parameters used during evaluation
+    definition=""" # parameters used during evaluation
 
     eval_id:            int         # id for the evaluation parameters
     ---
