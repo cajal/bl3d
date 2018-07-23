@@ -43,7 +43,7 @@ class TrainingParams(dj.Lookup):
                    'enhanced_input': False, 'anchor_size_d': 15, 'anchor_size_w': 9,
                    'anchor_size_h': 9, 'num_proposals': 1024, 'nms_iou': 0.5,
                    'roi_size_d': 14, 'roi_size_h': 14, 'roi_size_w': 14, 'momentum': 0.9,
-                   'num_epochs': 140, 'lr_decay': 0.1, 'lr_schedule': (100, ),
+                   'num_epochs': 150, 'lr_decay': 0.1, 'lr_schedule': (100, 140),
                    'positive_weight': 5}
 
 
