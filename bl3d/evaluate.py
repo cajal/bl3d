@@ -108,21 +108,25 @@ class DetectionMetrics(dj.Computed):
             masks = [1 / (1 + np.exp(-m)) for m in masks]
             label = label[0].numpy()
 
-            # Create slices per mask
-            low_indices = np.maximum(np.round(bboxes[:, :3] - bboxes[:, 3:] / 2), 0)
-            high_indices = np.round(bboxes[:, :3] + bboxes[:, 3:] / 2)
-            mask_slices = [(slice(l, h) for l, h in zip(low, high)) for low, high in
-                           zip(low_indices, high_indices)]
+            # Compute limits of each mask (used for slicing below)
+            low_indices = np.round(bboxes[:, :3] - bboxes[:, 3:] / 2).astype(int)
+            high_indices = np.round(bboxes[:, :3] + bboxes[:, 3:] / 2).astype(int)
 
             # Match each predicted mask to a ground truth mask
             mask_tps = np.zeros([len(acceptance_ious), len(probs)], dtype=bool)
             gt_tps = np.zeros([len(acceptance_ious), label.max()], dtype=bool)
-            for _, i, mask, slices in sorted(zip(probs, range(len(probs)), masks,
-                                                 mask_slices), reverse=True):
+            for _, i, mask, low, high in sorted(zip(probs, range(len(probs)), masks,
+                                                    low_indices, high_indices),
+                                                reverse=True):
+                # Reshape mask to full size
                 full_mask = np.zeros(label.shape, dtype=bool)
-                full_mask[slices] = mask > eval_params['mask_threshold']
-                matches = find_matches(label, full_mask)
+                full_slices = tuple(slice(max(l, 0), h) for l, h in zip(low, high))
+                mask_slices = tuple(slice(max(-l, 0), h - l - max(s - h, 0)) for l, h, s
+                                    in zip(low, high, label.shape))
+                full_mask[full_slices] = mask[mask_slices] > eval_params['mask_threshold']
 
+                # Assign mask to highest overlap match in ground truth label
+                matches = find_matches(label, full_mask)
                 for iou, match in sorted(matches, reverse=True):
                     is_acceptable = iou > acceptance_ious
                     is_unassigned = ~np.logical_or(gt_tps[:, match - 1], mask_tps[:, i])
