@@ -3,6 +3,7 @@ import torch
 from torch.utils.data import Dataset
 import numpy as np
 from scipy import ndimage
+import os.path
 
 from . import utils
 from . import data
@@ -55,7 +56,8 @@ class DetectionDataset(Dataset):
 
         # Get labels
         labels_rel = data.Stack.Label & [{'example_id': id_} for id_ in examples]
-        self.labels = labels_rel.fetch('label', order_by='example_id')
+        labels = labels_rel.fetch('label', order_by='example_id')
+        self.labels = [lbl.astype(np.int32) for lbl in labels]
 
         # Get cell bboxes
         self.cell_bboxes = []
@@ -66,41 +68,56 @@ class DetectionDataset(Dataset):
                 cell_bbox[3:, i] = [sl.stop - sl.start for sl in cell_slices] # d, h, w
             self.cell_bboxes.append(cell_bbox)
 
-        # Compute anchor bboxes (labels for RPN)
+        # Read anchor bboxes/labels for RPN (compute if needed)
         self.anchor_bboxes = []
-        anchor_volume = np.prod(anchor_size)
-        for label, cell_bbox in zip(self.labels, self.cell_bboxes):
-            anchor_lbl = np.zeros(label.shape, dtype=np.int32) # label of closest cell
-            anchor_iou = np.zeros(label.shape, dtype=np.float32) # iou with closest cell
-            for cell_id, cell_bbox in enumerate(cell_bbox, start=1):
-                # Compute iou with all intersecting anchors
-                intersection, iou_slices = _boxcar3d(cell_bbox, anchor_size, label.shape)
-                iou = intersection / (cell_bbox[3:].prod() + anchor_volume - intersection)
+        for example_id, label, cell_bbox in zip(examples, self.labels, self.cell_bboxes):
+            filename = '/tmp/ex_{}_as_{}-{}-{}_iou_{}.mmap'.format(example_id,
+                                                                   *anchor_size,
+                                                                   iou_threshold)
+            if not os.path.isfile(filename):
+                # For each anchor, compute label of closest cell and iou with it
+                anchor_lbl = np.zeros(label.shape, dtype=np.int32)
+                anchor_iou = np.zeros(label.shape, dtype=np.float32)
+                for cell_id, bbox in enumerate(cell_bbox.T, start=1):
+                    # Compute iou with all intersecting anchors
+                    intersection, iou_slices = _boxcar3d(bbox, anchor_size, label.shape)
+                    iou = intersection / (bbox[3:].prod() + np.prod(anchor_size)
+                                          - intersection)
 
-                # Update anchors whose iou is higher than previous one
-                to_update = iou > anchor_iou[iou_slices]
-                anchor_lbl[iou_slices][to_update] = cell_id
-                anchor_iou[iou_slices][to_update] = iou[to_update]
+                    # Update anchors whose iou is higher than previous one
+                    to_update = iou > anchor_iou[iou_slices]
+                    anchor_lbl[iou_slices][to_update] = cell_id
+                    anchor_iou[iou_slices][to_update] = iou[to_update]
 
-            # Compute parametrized bbox coordinates
-            anchor_bbox = cell_bbox[:, anchor_lbl - 1].copy() # 6 x d  x h x w
-            zyx = np.stack(np.meshgrid(*[np.arange(d) + 0.5 for d in label.shape], indexing='ij'))
-            as_ = np.array(anchor_size).reshape(3, 1, 1, 1) # to ease broadcasting
-            anchor_bbox[:3] = (anchor_bbox[:3] - zyx) / as_ # (x - xa) / wa
-            anchor_bbox[3:] = np.log(anchor_bbox[3:] / as_) # log(w / wa)
+                # Compute parametrized bbox coordinates
+                anchor_bbox = cell_bbox[:, anchor_lbl - 1].copy() # 6 x d x h x w
+                zyx = np.stack(np.meshgrid(*[np.arange(d) + 0.5 for d in label.shape],
+                                           indexing='ij'))
+                as_ = np.reshape(anchor_size, (3, 1, 1, 1)) # to ease broadcasting
+                anchor_bbox[:3] = (anchor_bbox[:3] - zyx) / as_ # (x - xa) / wa
+                anchor_bbox[3:] = np.log(anchor_bbox[3:] / as_) # log(w / wa)
 
-            # Select positive anchors (iou > thresh or highest iou with some cell)
-            positive_anchors = anchor_iou >= iou_threshold
-            for cell_id, cell_slices in enumerate(ndimage.find_objects(label), start=1):
-                cell_mask = np.logical_and(label[cell_slices] == cell_id, # inside cell mask
-                                           anchor_lbl[cell_slices] == cell_id) # has the right label
-                if np.any(cell_mask): # some small cells may not have highest IOU with any anchor
-                    max_iou = np.max(anchor_iou[cell_slices][cell_mask])
-                    new_positives = np.logical_and(anchor_iou[cell_slices] == max_iou, cell_mask)
-                    positive_anchors[cell_slices][new_positives] = True
-            anchor_bbox[:, ~positive_anchors] = float('nan')
+                # Select positive anchors (iou > thresh or highest iou with some cell)
+                positive_anchors = anchor_iou >= iou_threshold
+                for cell_id, cell_slices in enumerate(ndimage.find_objects(label), start=1):
+                    cell_mask = np.logical_and(label[cell_slices] == cell_id, # inside cell mask
+                                               anchor_lbl[cell_slices] == cell_id) # has the right label
+                    if np.any(cell_mask): # some small cells may not have highest IOU with any anchor
+                        max_iou = np.max(anchor_iou[cell_slices][cell_mask])
+                        new_positives = np.logical_and(anchor_iou[cell_slices] == max_iou,
+                                                       cell_mask)
+                        positive_anchors[cell_slices][new_positives] = True
+                anchor_bbox[:, ~positive_anchors] = float('nan')
 
-            self.anchor_bboxes.append(anchor_bbox)
+                # Save anchor bbox as memmap array
+                mmap_bbox = np.memmap(filename, dtype=np.float32, mode='w+',
+                                      shape=anchor_bbox.shape)
+                mmap_bbox[:] = anchor_bbox
+                mmap_bbox.flush()
+            mmap_bbox = np.memmap(filename, dtype=np.float32, mode='r',
+                                  shape=(6, *label.shape))
+
+            self.anchor_bboxes.append(mmap_bbox)
 
         # Store transform
         self.transform = transform
@@ -138,7 +155,7 @@ def _boxcar3d(bbox, filter_size, max_dim):
         conv1d = np.minimum(ramp, ramp[::-1])
 
         # Deal with edges
-        low_coord, high_coord = round(x - d/2) - fs//2, round(x + d/2) + fs//2
+        low_coord, high_coord = int(round(x - d/2)) - fs//2, int(round(x + d/2)) + fs//2
         conv1d = conv1d[max(0, -low_coord): len(conv1d) - max(0,  high_coord - max_x)]
         convolved1ds.append(conv1d)
         extended_slices.append(slice(max(0, low_coord), min(max_x, high_coord)))
