@@ -41,8 +41,9 @@ class RandomCrop:
         old_to_new[old_ids] = np.arange(len(old_ids)) + 1
         cropped_label = old_to_new[cropped_label]
 
-        # Crop cell bboxes (drop bboxes outside cropped volume)
-        cropped_cbbox = example[2][:, old_ids - 1]
+        # Crop cell bboxes (drop bboxes outside volume and change coords)
+        cropped_cbbox = example[2][:, old_ids - 1].copy()
+        cropped_cbbox[:3] = cropped_cbbox[:3] - np.reshape(start, (3, 1))
 
         return (cropped_volume, cropped_label, cropped_cbbox, cropped_abbox)
 
