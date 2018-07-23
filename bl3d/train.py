@@ -52,8 +52,8 @@ class TrainedModel(dj.Computed):
     """
     def make(self, key):
         """ Trains a Mask R-CNN model using SGD with Nesterov's Accelerated Gradient."""
-        log('Training model', key['model_id'], 'with hyperparams', key['training_id'],
-            'using', key['val_id'], 'for validation.')
+        log('Training model', key['model_version'], 'with hyperparams',
+            key['training_id'], 'using animal', key['val_animal'], 'for validation.')
         train_params = (params.TrainingParams & key).fetch1()
 
         # Set random seeds
@@ -61,6 +61,7 @@ class TrainedModel(dj.Computed):
         np.random.seed(train_params['seed'])
 
         # Get datasets
+        log('Creating datasets')
         train_examples = (params.TrainingSplit & key).fetch1('train_examples')
         train_transform = Compose([transforms.RandomCrop(train_params['crop_size']),
                                    transforms.RandomRotate(),
@@ -68,7 +69,7 @@ class TrainedModel(dj.Computed):
                                    transforms.ContrastNorm(),
                                    transforms.MakeContiguous()])
         dset_kwargs = {'enhance_volume': train_params['enhanced_input'],
-                       'anchor_size': (train_params['anchor_size_' + d] for d in 'dhw')}
+                       'anchor_size': tuple(train_params['anchor_size_' + d] for d in 'dhw')}
         train_dset = datasets.DetectionDataset(train_examples, train_transform, **dset_kwargs)
         train_dloader = data.DataLoader(train_dset, shuffle=True, num_workers=2, pin_memory=True)
 
@@ -79,8 +80,9 @@ class TrainedModel(dj.Computed):
         val_dloader = data.DataLoader(val_dset, shuffle=True, num_workers=2, pin_memory=True)
 
         # Get model
+        log('Instantiating model')
         net = models.MaskRCNN(anchor_size=dset_kwargs['anchor_size'],
-                              roi_size=(train_params['roi_size_' + d] for d in 'dhw'),
+                              roi_size=tuple(train_params['roi_size_' + d] for d in 'dhw'),
                               nms_iou=train_params['nms_iou'],
                               num_proposals=train_params['num_proposals'])
         if ((net.core.version, net.rpn.version, net.bbox.version, net.fcn.version) !=
@@ -102,7 +104,6 @@ class TrainedModel(dj.Computed):
         # Initialize some logs
         train_loss = []
         val_loss = []
-
         best_model = net
         best_val_loss = 1e10 # float('inf')
         best_epoch = 0
@@ -122,18 +123,18 @@ class TrainedModel(dj.Computed):
 
                 # Create labels for the top proposals (passed through the bbox and mask branch)
                 roi_bboxes, roi_masks = create_branch_labels(top_proposals, net.roi_size,
-                                                             cell_bboxes[0].numpy().T,
-                                                             label[0].numpy())
+                                                             label[0].numpy(),
+                                                             cell_bboxes[0].numpy().T)
                 roi_bboxes = torch.cuda.FloatTensor(roi_bboxes)
-                roi_masks = torch.cuda.ByteTensor(roi_masks)
-
+                roi_masks = torch.cuda.ByteTensor(roi_masks.astype(np.uint8))
 
                 # Compute loss
                 anchor_bboxes = anchor_bboxes.cuda()
                 loss = compute_loss(scores, ~torch.isnan(anchor_bboxes[:, 0]), proposals,
                                     anchor_bboxes, probs, ~torch.isnan(roi_bboxes[:, 0]),
                                     bboxes, roi_bboxes, masks, roi_masks,
-                                    rpn_pos_weight=params['positive_weight'])
+                                    rpn_pos_weight=params['positive_weight'],
+                                    smoothl1_weight=params['smoothl1_weight'])
 
                 # Record training loss
                 log('Training loss:', loss.item())
@@ -146,7 +147,7 @@ class TrainedModel(dj.Computed):
                          top_proposals, probs, bboxes, masks, roi_bboxes, roi_masks,
                          loss) # free space
 
-                    log('Inserting results...')
+                    log('Inserting results')
                     results = key.copy()
                     results['train_loss'] = train_loss
                     results['val_loss'] = val_loss
@@ -185,7 +186,7 @@ class TrainedModel(dj.Computed):
                 best_epoch = epoch
 
         # Insert results
-        log('Inserting results...')
+        log('Inserting results')
         results = key.copy()
         results['train_loss'] = train_loss
         results['val_loss'] = val_loss
@@ -202,8 +203,8 @@ class TrainedModel(dj.Computed):
     def load_model(key, best_or_final='best'):
         # Declare network
         train_params = (params.TrainingParams & key).fetch1()
-        net = models.MaskRCNN(anchor_size=(train_params['anchor_size_' + d] for d in 'dhw'),
-                              roi_size=(train_params['roi_size_' + d] for d in 'dhw'),
+        net = models.MaskRCNN(anchor_size=tuple(train_params['anchor_size_' + d] for d in 'dhw'),
+                              roi_size=tuple(train_params['roi_size_' + d] for d in 'dhw'),
                               nms_iou=train_params['nms_iou'],
                               num_proposals=train_params['num_proposals'])
         if ((net.core.version, net.rpn.version, net.bbox.version, net.fcn.version) !=
@@ -226,9 +227,9 @@ def create_branch_labels(bboxes, roi_size, label, gt_bboxes, iou_thresh=0.5):
         bboxes: An array (N x 6). Bboxes for which labels will be created. Absolute bbox
             coordinates (z, y, x, d, h, w).
         roi_size: An int or triplet. Size of the roi to sample.
-        gt_bboxes: An array (NOBJECTS x 6). Ground truth bboxes in absolute coords.
         label: An array (D x H x W) with the id of the object labelled at each voxel.
             Zero if no object is found in that voxel.
+        gt_bboxes: An array (NOBJECTS x 6). Ground truth bboxes in absolute coords.
         iou_thresh: Float. Threshold to determine whether a bbox will be considered a
             positive object.
 
@@ -267,7 +268,7 @@ def create_branch_labels(bboxes, roi_size, label, gt_bboxes, iou_thresh=0.5):
 
 
 def compute_loss(scores, scores_lbl, proposals, proposals_lbl, probs, probs_lbl, bboxes,
-                 bboxes_lbl, masks, masks_lbl, rpn_pos_weight):
+                 bboxes_lbl, masks, masks_lbl, rpn_pos_weight, smoothl1_weight):
     """ Compute Mask-RCNN (end-to-end) loss: L = L_{rpn} + L_{bbox} + L_{mask}.
 
     L_{rpn} and L_{bbox} (Ren et al. 2017; Eq. 3) are each the sum of the logistic loss
@@ -279,7 +280,7 @@ def compute_loss(scores, scores_lbl, proposals, proposals_lbl, probs, probs_lbl,
     use a weighted loss function with rpn_pos_weight:1 weights.
 
     Arguments:
-        scores: A N x D x H x W tensor. Logits (unnormalized log probabilities) per voxel.
+        scores: A N x D x H x W tensor. Logits (unnormalized log probs) per voxel.
         proposals: A N x 6 x D x H x W tensor. Parametrized bbox coordinates per voxel.
         probs: A NROIS tensor. Logits (unnormalized log probabilities) per ROI.
         bboxes: A NROIS x 6 tensor. Parametrized bbox coordinates per ROI.
@@ -287,6 +288,8 @@ def compute_loss(scores, scores_lbl, proposals, proposals_lbl, probs, probs_lbl,
             voxel.
         *_lbl: Tensors with the same shape as the predicted version. Labels.
         rpn_pos_weight: A float. Weight given to the predictions on positive RPN scores.
+        smoothl1_weight: A float. Weight for the smooth L1 loss component in L_{rpn} and
+            L_{bbox}.
 
     Returns:
         A scalar tensor/float. The total loss.
@@ -299,19 +302,20 @@ def compute_loss(scores, scores_lbl, proposals, proposals_lbl, probs, probs_lbl,
     # Compute RPN loss
     weights = torch.ones_like(scores)
     weights[scores_lbl] = rpn_pos_weight
-    rpn_class_loss = F.binary_cross_entropy_with_logits(scores, scores_lbl.double(),
+    rpn_class_loss = F.binary_cross_entropy_with_logits(scores, scores_lbl.float(),
                                                         weight=weights)
-    rpn_bbox_loss = F.smooth_l1_loss(proposals[scores_lbl], proposals_lbl[scores_lbl])
-    rpn_loss = rpn_class_loss + rpn_bbox_loss
+    rpn_bbox_loss = F.smooth_l1_loss(proposals.transpose(0, 1)[:, scores_lbl],
+                                     proposals_lbl.transpose(0, 1)[:, scores_lbl])
+    rpn_loss = rpn_class_loss + smoothl1_weight * rpn_bbox_loss
 
     # Compute bbox loss
-    bbox_class_loss = F.binary_cross_entropy_with_logits(probs, probs_lbl.double())
+    bbox_class_loss = F.binary_cross_entropy_with_logits(probs, probs_lbl.float())
     bbox_bbox_loss = F.smooth_l1_loss(bboxes[probs_lbl], bboxes_lbl[probs_lbl])
-    bbox_loss = bbox_class_loss + bbox_bbox_loss
+    bbox_loss = bbox_class_loss + smoothl1_weight * bbox_bbox_loss
 
     # Compute fcn loss
     fcn_loss = F.binary_cross_entropy_with_logits(masks[probs_lbl],
-                                                  masks_lbl[probs_lbl].double())
+                                                  masks_lbl[probs_lbl].float())
 
     # Combine
     loss = rpn_loss + bbox_loss + fcn_loss
@@ -330,7 +334,7 @@ def compute_loss_on_batch(net, dataloader):
             # Forward
             scores, proposals, top_proposals, probs, bboxes, masks = net(volume.cuda())
 
-            # Create labels for the top proposals (passed through the bbox and mask branch)
+            # Create labels for the top proposals (passed through bbox and mask branch)
             roi_bboxes, roi_masks = create_branch_labels(top_proposals, net.roi_size,
                                                          cell_bboxes[0].numpy().T,
                                                          label[0].numpy())
@@ -343,7 +347,8 @@ def compute_loss_on_batch(net, dataloader):
             loss = compute_loss(scores, ~torch.isnan(anchor_bboxes[:, 0]), proposals,
                                 anchor_bboxes, probs, ~torch.isnan(roi_bboxes[:, 0]),
                                 bboxes, roi_bboxes, masks, roi_masks,
-                                rpn_pos_weight=params['positive_weight'])
+                                rpn_pos_weight=params['positive_weight'],
+                                smoothl1_weight=params['smoothl1_weight'])
             total_loss += loss.item()
     loss = total_loss / len(dataloader)
 
