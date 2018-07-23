@@ -235,7 +235,6 @@ class MaskRCNN(nn.Module):
             bboxes: A NROIS x 6 tensor. Bounding boxes of each final bbox.
             masks: A NROIS x R1 x R2 x R3 tensor. Heatmap of logits per bbox.
         """
-
         # Get intermediate representation
         hidden = self.core(input_)
 
