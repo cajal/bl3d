@@ -47,12 +47,12 @@ class DenseNet(nn.Module):
 
     def forward(self, input_):
         padded = F.pad(input_, (9,) * 6, mode='replicate')
-        h1 = torch.cat([padded[..., 1:-1, 1:-1, 1:-1], self.conv1(padded)], 1)
-        h2 = torch.cat([h1[..., 1:-1, 1:-1, 1:-1], self.conv2(F.relu(self.bn1(h1), inplace=True))], 1)
-        h3 = torch.cat([h2[..., 2:-2, 2:-2, 2:-2], self.conv3(F.relu(self.bn2(h2), inplace=True))], 1)
-        h4 = torch.cat([h3[..., 2:-2, 2:-2, 2:-2], self.conv4(F.relu(self.bn3(h3), inplace=True))], 1)
-        h5 = torch.cat([h4[..., 3:-3, 3:-3, 3:-3], self.conv5(F.relu(self.bn4(h4), inplace=True))], 1)
-        return h5
+        a1 = torch.cat([padded[..., 1:-1, 1:-1, 1:-1], self.conv1(padded)], 1)
+        a2 = torch.cat([a1[..., 1:-1, 1:-1, 1:-1], self.conv2(F.relu(self.bn1(a1), inplace=True))], 1)
+        a3 = torch.cat([a2[..., 2:-2, 2:-2, 2:-2], self.conv3(F.relu(self.bn2(a2), inplace=True))], 1)
+        a4 = torch.cat([a3[..., 2:-2, 2:-2, 2:-2], self.conv4(F.relu(self.bn3(a3), inplace=True))], 1)
+        a5 = torch.cat([a4[..., 3:-3, 3:-3, 3:-3], self.conv5(F.relu(self.bn4(a4), inplace=True))], 1)
+        return a5
 
     def init_parameters(self):
         init_conv([self.conv1, self.conv2, self.conv3, self.conv4, self.conv5])
@@ -94,10 +94,7 @@ class RPN(nn.Module):
         # Initialize last fuly connected layer to keep bbox predictions close to zero
         nn.init.kaiming_normal_(self.fc2.weight[:1])
         nn.init.normal_(self.fc2.weight[1:], mean=0, std=0.01)
-        #nn.init.normal_(self.fc2.weight[1:], mean=0, std=0.1*np.sqrt(2/self.fc2.weight.shape[1]))
         nn.init.constant_(self.fc2.bias, 0)
-
-
 
 
 class Bbox(nn.Module):
@@ -238,6 +235,7 @@ class MaskRCNN(nn.Module):
             bboxes: A NROIS x 6 tensor. Bounding boxes of each final bbox.
             masks: A NROIS x R1 x R2 x R3 tensor. Heatmap of logits per bbox.
         """
+
         # Get intermediate representation
         hidden = self.core(input_)
 
@@ -450,16 +448,17 @@ def roi_align(features, bboxes, roi_size):
     low_gs = (2 * low_sample - volume_dhw) / (volume_dhw - 1)
     high_gs = (2 * high_sample - volume_dhw) / (volume_dhw - 1)
 
-    # Create grids
-    grids = np.empty((len(bboxes), *(2 * roi_size), 3))
+    # Sample ROI features
+    roi_features = torch.empty(len(bboxes), features.shape[1], *roi_size,
+                               device=features.device)
     for i, lp, hp in zip(range(len(bboxes)), low_gs, high_gs):
+        # Create grid (numpy)
         coords = [np.linspace(l, h, 2 * rs) for l, h, rs in zip(lp, hp, roi_size)]
-        grids[i] = np.stack(np.meshgrid(*coords, indexing='ij'), axis=-1)
+        grid = np.stack(np.meshgrid(*coords, indexing='ij'), axis=-1) # 2*R1 x 2*R2 x 2*R3 x 3
 
-    # Sample the grid and pool
-    grids = torch.FloatTensor(np.expand_dims(grids, 1)).to(features.device) # NROIS x 1 x 2*R1 x 2*R2 x 2*R3 x 3
-    roi_features = torch.cat([F.grid_sample(features, g) for g in grids])
-    roi_features = F.avg_pool3d(roi_features, 2)
+        # Sample the grid and pool (pytorch)
+        g = torch.Tensor(np.expand_dims(grid, 0)).to(features.device)
+        roi_features[i] = F.avg_pool3d(F.grid_sample(features, g), 2)
 
     return roi_features
 
