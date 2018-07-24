@@ -25,7 +25,7 @@ RUN pip3 install http://download.pytorch.org/whl/cu91/torch-0.4.0-cp35-cp35m-lin
 #    pip3 install torchvision
 
 # Install datajoint
-RUN pip3 install datajoint
+RUN apt-get install -y libssl-dev && pip3 install datajoint
 
 # Install bl3d
 ADD . /src/bl3d
