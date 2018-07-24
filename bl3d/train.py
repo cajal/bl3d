@@ -193,7 +193,7 @@ class TrainedModel(dj.Computed):
             if epoch_val_loss < best_val_loss:
                 log('Saving best model...')
                 best_val_loss = epoch_val_loss
-                best_model = net
+                best_model = net # TODO: This has to be wrong
                 best_epoch = epoch
 
         # Insert results
@@ -319,18 +319,27 @@ def compute_loss(scores, scores_lbl, proposals, proposals_lbl, probs, probs_lbl,
     weights[scores_lbl] = rpn_pos_weight
     rpn_class_loss = F.binary_cross_entropy_with_logits(scores, scores_lbl.float(),
                                                         weight=weights)
-    rpn_bbox_loss = F.smooth_l1_loss(proposals.transpose(0, 1)[:, scores_lbl],
-                                     proposals_lbl.transpose(0, 1)[:, scores_lbl])
+    if scores_lbl.any():
+        rpn_bbox_loss = F.smooth_l1_loss(proposals.transpose(0, 1)[:, scores_lbl],
+                                         proposals_lbl.transpose(0, 1)[:, scores_lbl])
+    else:
+        rpn_bbox_loss = 0
     rpn_loss = rpn_class_loss + smoothl1_weight * rpn_bbox_loss
 
     # Compute bbox loss
     bbox_class_loss = F.binary_cross_entropy_with_logits(probs, probs_lbl.float())
-    bbox_bbox_loss = F.smooth_l1_loss(bboxes[probs_lbl], bboxes_lbl[probs_lbl])
+    if probs_lbl.any():
+        bbox_bbox_loss = F.smooth_l1_loss(bboxes[probs_lbl], bboxes_lbl[probs_lbl])
+    else:
+        bbox_bbox_loss = 0
     bbox_loss = bbox_class_loss + smoothl1_weight * bbox_bbox_loss
 
     # Compute fcn loss
-    fcn_loss = F.binary_cross_entropy_with_logits(masks[probs_lbl],
-                                                  masks_lbl[probs_lbl].float())
+    if probs_lbl.any():
+        fcn_loss = F.binary_cross_entropy_with_logits(masks[probs_lbl],
+                                                      masks_lbl[probs_lbl].float())
+    else:
+        fcn_loss = 0
 
     # Combine
     loss = rpn_loss + bbox_loss + fcn_loss
