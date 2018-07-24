@@ -166,7 +166,7 @@ class FCN(nn.Module):
         self.conv3 = nn.Conv3d(48, 48, 3, dilation=2, bias=False)
         self.bn3 = nn.BatchNorm3d(48)
         self.fc1 = nn.Conv3d(48, 96, 1, bias=False)
-        self.bn5 = nn.BatchNorm3d(96)
+        self.bn4 = nn.BatchNorm3d(96)
         self.fc2 = nn.Conv3d(96, 1, 1)
 
     def forward(self, input_):
@@ -174,13 +174,13 @@ class FCN(nn.Module):
         a1 = F.relu(self.bn1(self.conv1(padded)), inplace=True)
         a2 = F.relu(self.bn2(self.conv2(a1)), inplace=True)
         a3 = F.relu(self.bn3(self.conv3(a2)), inplace=True)
-        a4 = F.relu(self.bn5(self.fc1(a3)), inplace=True)
+        a4 = F.relu(self.bn4(self.fc1(a3)), inplace=True)
         out = self.fc2(a4)
         return out[:, 0]
 
     def init_parameters(self):
         init_conv([self.conv1, self.conv2, self.conv3, self.fc1, self.fc2])
-        init_bn([self.bn1, self.bn2, self.bn2, self.bn3, self.bn4, self.bn5])
+        init_bn([self.bn1, self.bn2, self.bn2, self.bn3, self.bn4])
 
 
 class MaskRCNN(nn.Module):
