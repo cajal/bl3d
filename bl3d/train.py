@@ -354,7 +354,7 @@ def compute_loss_on_batch(net, dataloader, rpn_pos_weight, smoothl1_weight):
                                                          label[0].numpy(),
                                                          cell_bboxes[0].numpy().T)
             roi_bboxes = torch.cuda.FloatTensor(roi_bboxes)
-            roi_masks = torch.cuda.ByteTensor(roi_masks)
+            roi_masks = torch.cuda.ByteTensor(roi_masks.astype(np.uint8))
 
             # Compute loss
             anchor_bboxes = anchor_bboxes.cuda()
