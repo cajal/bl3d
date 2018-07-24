@@ -351,11 +351,10 @@ def compute_loss_on_batch(net, dataloader, rpn_pos_weight, smoothl1_weight):
 
             # Create labels for the top proposals (passed through bbox and mask branch)
             roi_bboxes, roi_masks = create_branch_labels(top_proposals, net.roi_size,
-                                                         cell_bboxes[0].numpy().T,
-                                                         label[0].numpy())
+                                                         label[0].numpy(),
+                                                         cell_bboxes[0].numpy().T)
             roi_bboxes = torch.cuda.FloatTensor(roi_bboxes)
             roi_masks = torch.cuda.ByteTensor(roi_masks)
-
 
             # Compute loss
             anchor_bboxes = anchor_bboxes.cuda()
