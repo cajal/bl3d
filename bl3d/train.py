@@ -161,10 +161,12 @@ class TrainedModel(dj.Computed):
                                                             train_params['smoothl1_weight'])
                     results['best_train_loss'] = mysql_float(best_train_loss)
                     results['final_model'] = {k: v.cpu().numpy() for k, v in net.state_dict().items()}
+                    net.num_proposals = train_params['val_num_proposals']
                     final_val_loss = compute_loss_on_batch(net, val_dloader,
                                                            train_params['positive_weight'],
                                                            train_params['smoothl1_weight'])
                     results['final_val_loss'] = mysql_float(final_val_loss)
+                    net.num_proposals = train_params['num_proposals']
                     final_train_loss = compute_loss_on_batch(net, train_dloader,
                                                              train_params['positive_weight'],
                                                              train_params['smoothl1_weight'])
@@ -181,9 +183,11 @@ class TrainedModel(dj.Computed):
                      top_proposals, probs, bboxes, masks, roi_bboxes, roi_masks, loss)
 
             # Record validation loss
+            net.num_proposals = train_params['val_num_proposals']
             epoch_val_loss = compute_loss_on_batch(net, val_dloader,
                                                    train_params['positive_weight'],
                                                    train_params['smoothl1_weight'])
+            net.num_proposals = train_params['num_proposals']
             log('Validation loss:', epoch_val_loss)
             val_loss.append(epoch_val_loss)
 

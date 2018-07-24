@@ -20,6 +20,7 @@ class TrainingParams(dj.Lookup):
     anchor_size_h:      tinyint         # size of the anchor (height)
 
     num_proposals:      int             # number of ROI proposals to refine and segment
+    val_num_proposals:  int             # number of ROI proposals to refine and segment during validation
     nms_iou:            float           # IOU used as non-maximum-suppression threshold
     roi_size_d:         tinyint         # size of the extracted ROIs (depth)
     roi_size_h:         tinyint         # size of the extracted ROIs (height)
@@ -43,9 +44,9 @@ class TrainingParams(dj.Lookup):
                    'smoothl1_weight': sl1_weight, 'seed': 1234, 'train_crop_size': 96,
                    'val_crop_size': 160, 'enhanced_input': False, 'anchor_size_d': 15,
                    'anchor_size_w': 9, 'anchor_size_h': 9, 'num_proposals': 896,
-                   'nms_iou': 0.5, 'roi_size_d': 12, 'roi_size_h': 12, 'roi_size_w': 12,
-                   'momentum': 0.9, 'num_epochs': 150, 'lr_decay': 0.1,
-                   'lr_schedule': (100, 140), 'positive_weight': 5}
+                   'val_num_proposals': 1536, 'nms_iou': 0.5, 'roi_size_d': 12,
+                   'roi_size_h': 12, 'roi_size_w': 12, 'momentum': 0.9, 'num_epochs': 3,
+                   'lr_decay': 0.1, 'lr_schedule': (100, 140), 'positive_weight': 5}
 
 
 @schema
