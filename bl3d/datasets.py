@@ -145,7 +145,8 @@ def _boxcar3d(bbox, filter_size, max_dim):
 
     Returns:
         convolved3d: 3-d array. Bbox convolved with a 3-d tensor of filter_size size.
-        extended_slices: List of slices of convolved3d in the original coordinate system.
+        extended_slices: A triplet. Slices of convolved3d in the original coordinate
+            system.
     """
     extended_slices = []
     convolved1ds = []
@@ -163,4 +164,4 @@ def _boxcar3d(bbox, filter_size, max_dim):
     # Create 3d convolution (outer product all dimensions)
     convolved3d = np.einsum('i, j, k -> ijk', *convolved1ds)
 
-    return convolved3d, extended_slices
+    return convolved3d, tuple(extended_slices)

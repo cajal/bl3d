@@ -28,7 +28,7 @@ class RandomCrop:
         max_indices = [max(0, dim - siz - exc) for dim, siz, exc in zip(example[1].shape,
                        self.size, self.exclude_border)]
         start = [np.random.randint(max_idx + 1) for max_idx in max_indices]
-        slices = [slice(st, st + siz) for st, siz in zip(start, self.size)]
+        slices = tuple(slice(st, st + siz) for st, siz in zip(start, self.size))
 
         # Crop
         cropped_volume = example[0][(Ellipsis, *slices)]
