@@ -12,7 +12,8 @@ class TrainingParams(dj.Lookup):
     training_id:        int             # unique id for hyperparameter combination
     ---
     seed:               int             # random seed for torch/np
-    crop_size:          int             # size of the random crops used for training
+    train_crop_size:    int             # size of the random crops used for training
+    val_crop_size:      int             # size of the random crops used for validation
     enhanced_input:     boolean         # whether to use enhanced input
     anchor_size_d:      tinyint         # size of the anchor (depth)
     anchor_size_w:      tinyint         # size of the anchor (width)
@@ -39,12 +40,12 @@ class TrainingParams(dj.Lookup):
         search_params = itertools.product([0.001, 0.01, 0.1], [1e-5, 1e-4, 1e-3], [1, 10])
         for id_, (lr, lambda_, sl1_weight) in enumerate(search_params, start=1):
             yield {'training_id': id_, 'learning_rate': lr, 'weight_decay': lambda_,
-                   'smoothl1_weight': sl1_weight, 'seed': 1234, 'crop_size': 128,
-                   'enhanced_input': False, 'anchor_size_d': 15, 'anchor_size_w': 9,
-                   'anchor_size_h': 9, 'num_proposals': 1024, 'nms_iou': 0.5,
-                   'roi_size_d': 14, 'roi_size_h': 14, 'roi_size_w': 14, 'momentum': 0.9,
-                   'num_epochs': 150, 'lr_decay': 0.1, 'lr_schedule': (100, 140),
-                   'positive_weight': 5}
+                   'smoothl1_weight': sl1_weight, 'seed': 1234, 'train_crop_size': 96,
+                   'val_crop_size': 160, 'enhanced_input': False, 'anchor_size_d': 15,
+                   'anchor_size_w': 9, 'anchor_size_h': 9, 'num_proposals': 896,
+                   'nms_iou': 0.5, 'roi_size_d': 12, 'roi_size_h': 12, 'roi_size_w': 12,
+                   'momentum': 0.9, 'num_epochs': 150, 'lr_decay': 0.1,
+                   'lr_schedule': (100, 140), 'positive_weight': 5}
 
 
 @schema
