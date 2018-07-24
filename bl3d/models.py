@@ -179,7 +179,7 @@ class FCN(nn.Module):
         return out[:, 0]
 
     def init_parameters(self):
-        init_conv([self.conv1, self.conv2, self.conv3, self.conv4, self.fc1, self.fc2])
+        init_conv([self.conv1, self.conv2, self.conv3, self.fc1, self.fc2])
         init_bn([self.bn1, self.bn2, self.bn2, self.bn3, self.bn4, self.bn5])
 
 
