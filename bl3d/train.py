@@ -85,7 +85,7 @@ class TrainedModel(dj.Computed):
         net = models.MaskRCNN(anchor_size=dset_kwargs['anchor_size'],
                               roi_size=tuple(train_params['roi_size_' + d] for d in 'dhw'),
                               nms_iou=train_params['nms_iou'],
-                              num_proposals=train_params['num_proposals'])
+                              num_proposals=train_params['train_num_proposals'])
         if ((net.core.version, net.rpn.version, net.bbox.version, net.fcn.version) !=
             (params.ModelParams & key).fetch1('core_version', 'rpn_version',
                                               'bbox_version', 'fcn_version')):
@@ -105,7 +105,7 @@ class TrainedModel(dj.Computed):
         # Initialize some logs
         train_loss = []
         val_loss = []
-        best_model = net
+        best_model = copy.deepcopy(net)
         best_val_loss = 1e10 # float('inf')
         best_epoch = 0
         for epoch in range(1, train_params['num_epochs'] + 1):
@@ -166,7 +166,7 @@ class TrainedModel(dj.Computed):
                                                            train_params['positive_weight'],
                                                            train_params['smoothl1_weight'])
                     results['final_val_loss'] = mysql_float(final_val_loss)
-                    net.num_proposals = train_params['num_proposals']
+                    net.num_proposals = train_params['train_num_proposals']
                     final_train_loss = compute_loss_on_batch(net, train_dloader,
                                                              train_params['positive_weight'],
                                                              train_params['smoothl1_weight'])
@@ -187,7 +187,7 @@ class TrainedModel(dj.Computed):
             epoch_val_loss = compute_loss_on_batch(net, val_dloader,
                                                    train_params['positive_weight'],
                                                    train_params['smoothl1_weight'])
-            net.num_proposals = train_params['num_proposals']
+            net.num_proposals = train_params['train_num_proposals']
             log('Validation loss:', epoch_val_loss)
             val_loss.append(epoch_val_loss)
 
