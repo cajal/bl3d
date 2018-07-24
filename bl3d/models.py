@@ -262,8 +262,7 @@ class MaskRCNN(nn.Module):
         self.bbox.init_parameters()
         self.fcn.init_parameters()
 
-    def forward_eval(self, input_, eval_proposals, eval_masks, block_size=256,
-                     padding=32):
+    def forward_eval(self, input_, eval_proposals, eval_masks):
         """ Forward used during evaluation. This is non-differentiable.
 
         Information flow changes during evaluation: full size stacks will overflow memory
@@ -275,10 +274,6 @@ class MaskRCNN(nn.Module):
             input_: A 1 x 1 x D x H x W tensor. Input volume.
             eval_proposals: Number of proposals to select after the RPN.
             eval_masks: Number of refined bboxes that will go through the mask branch.
-            block_size: Int or triplet. Maximum block size to forward through the core
-                and rpn networks in a single pass.
-            padding: Int or triplet. Amount of padding the network does that we discard
-                off the edges of each block. Overestimating better than underestimating.
 
         Returns:
             top_probs: A NMASKS vector. Logits for each of the final detections.
@@ -286,9 +281,9 @@ class MaskRCNN(nn.Module):
             top_masks: A list of (Di x Hi x Wi) arrays. Heatmap of logits for each final
                 detection resampled to match each mask's size in the original image.
         """
-       # Get intermediate representation
-        hidden = forward_on_big_input(self.core, input_, block_size, padding,
-                                      out_channels=41)
+        # Get intermediate representation
+        hidden = self.core(input_)
+        #TODO: hidden = forward_on_big_input(self.core, input_, out_channels=41, block_size=256, padding=10)
 
         # Get top-k proposals (after NMS)
         scores, proposals = self.rpn(hidden) # n x d x h x w, n x 6 x d x h x w
@@ -296,12 +291,16 @@ class MaskRCNN(nn.Module):
                                                     self.anchor_size)
         _, top_proposals = non_maximum_suppression(abs_proposals, scores.detach().cpu().numpy(),
                                                    self.nms_iou, stop_after=eval_proposals)
+        del scores, proposals
+
+        #TODO: Run in batches over top_proposals (roi_align->bbbox->mask) if it overflows memory
 
         # ROI align
         roi_features = roi_align(hidden, top_proposals[0], self.roi_size)
 
         # Refine bbox
         probs, bboxes = self.bbox(roi_features) # NROIS, NROIS x 6
+        del roi_features
 
         # Get top-k bboxes
         abs_bboxes = _deparametrize_bboxes(bboxes.detach().cpu().numpy(),
@@ -311,9 +310,11 @@ class MaskRCNN(nn.Module):
                                                         np.expand_dims(probs.detach().cpu().numpy(), 0),
                                                         self.nms_iou, stop_after=eval_masks)
         bbox_features = roi_align(hidden, top_bboxes[0], self.roi_size)
+        del probs, bboxes, hidden
 
         # Segment
-        masks = self.fcn(bbox_features) #TODO: Run in batches if it overflows memory
+        #TODO: Run in batches if it overflows memory
+        masks = self.fcn(bbox_features)
         top_masks = quantize_masks(masks.detach().cpu().numpy(), top_bboxes)
 
         return top_probs, top_bboxes, top_masks
