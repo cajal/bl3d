@@ -1,7 +1,8 @@
 """ Importing structural data from our pipeline. """
 import datajoint as dj
-import torch
 import numpy as np
+import copy
+import torch
 from torch import optim
 from torch.optim import lr_scheduler
 from torch.utils import data
@@ -193,7 +194,7 @@ class TrainedModel(dj.Computed):
             if epoch_val_loss < best_val_loss:
                 log('Saving best model...')
                 best_val_loss = epoch_val_loss
-                best_model = net # TODO: This has to be wrong
+                best_model = copy.deepcopy(net)
                 best_epoch = epoch
 
         # Insert results
