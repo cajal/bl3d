@@ -63,7 +63,7 @@ class TrainedModel(dj.Computed):
         # Get datasets
         log('Creating datasets')
         train_examples = (params.TrainingSplit & key).fetch1('train_examples')
-        train_transform = Compose([transforms.RandomCrop(train_params['crop_size']),
+        train_transform = Compose([transforms.RandomCrop(train_params['train_crop_size']),
                                    transforms.RandomRotate(),
                                    transforms.RandomHorizontalFlip(),
                                    transforms.ContrastNorm(),
@@ -74,7 +74,7 @@ class TrainedModel(dj.Computed):
         train_dloader = data.DataLoader(train_dset, shuffle=True, num_workers=2, pin_memory=True)
 
         val_examples = (params.TrainingSplit & key).fetch1('val_examples')
-        val_transform = Compose([transforms.RandomCrop(train_params['crop_size']),
+        val_transform = Compose([transforms.RandomCrop(train_params['val_crop_size']),
                                  transforms.ContrastNorm()])
         val_dset = datasets.DetectionDataset(val_examples, val_transform, **dset_kwargs)
         val_dloader = data.DataLoader(val_dset, shuffle=True, num_workers=2, pin_memory=True)
@@ -133,8 +133,8 @@ class TrainedModel(dj.Computed):
                 loss = compute_loss(scores, ~torch.isnan(anchor_bboxes[:, 0]), proposals,
                                     anchor_bboxes, probs, ~torch.isnan(roi_bboxes[:, 0]),
                                     bboxes, roi_bboxes, masks, roi_masks,
-                                    rpn_pos_weight=params['positive_weight'],
-                                    smoothl1_weight=params['smoothl1_weight'])
+                                    rpn_pos_weight=train_params['positive_weight'],
+                                    smoothl1_weight=train_params['smoothl1_weight'])
 
                 # Record training loss
                 log('Training loss:', loss.item())
@@ -155,10 +155,19 @@ class TrainedModel(dj.Computed):
                     results['best_model'] = {k: v.cpu().numpy() for k, v in best_model.state_dict().items()}
                     results['best_epoch'] = best_epoch
                     results['best_val_loss'] = best_val_loss
-                    results['best_train_loss'] = mysql_float(compute_loss_on_batch(best_model, train_dloader))
+                    best_train_loss = compute_loss_on_batch(best_model, train_dloader,
+                                                            train_params['positive_weight'],
+                                                            train_params['smoothl1_weight'])
+                    results['best_train_loss'] = mysql_float(best_train_loss)
                     results['final_model'] = {k: v.cpu().numpy() for k, v in net.state_dict().items()}
-                    results['final_val_loss'] = mysql_float(compute_loss_on_batch(net, val_dloader))
-                    results['final_train_loss'] = mysql_float(compute_loss_on_batch(net, train_dloader))
+                    final_val_loss = compute_loss_on_batch(net, val_dloader,
+                                                           train_params['positive_weight'],
+                                                           train_params['smoothl1_weight'])
+                    results['final_val_loss'] = mysql_float(final_val_loss)
+                    final_train_loss = compute_loss_on_batch(net, train_dloader,
+                                                             train_params['positive_weight'],
+                                                             train_params['smoothl1_weight'])
+                    results['final_train_loss'] = mysql_float(final_train_loss)
                     self.insert1(results)
                     return -1
 
@@ -171,17 +180,19 @@ class TrainedModel(dj.Computed):
                      top_proposals, probs, bboxes, masks, roi_bboxes, roi_masks, loss)
 
             # Record validation loss
-            val_loss_ = compute_loss_on_batch(net, val_dloader)
-            log('Validation loss:', val_loss_)
-            val_loss.append(val_loss_)
+            epoch_val_loss = compute_loss_on_batch(net, val_dloader,
+                                                   train_params['positive_weight'],
+                                                   train_params['smoothl1_weight'])
+            log('Validation loss:', epoch_val_loss)
+            val_loss.append(epoch_val_loss)
 
             # Reduce learning rate
             scheduler.step()
 
             # Save best model
-            if val_loss_ < best_val_loss:
+            if epoch_val_loss < best_val_loss:
                 log('Saving best model...')
-                best_val_loss = val_loss_
+                best_val_loss = epoch_val_loss
                 best_model = net
                 best_epoch = epoch
 
@@ -194,10 +205,14 @@ class TrainedModel(dj.Computed):
         results['best_model'] = {k: v.cpu().numpy() for k, v in best_model.state_dict().items()}
         results['best_epoch'] = best_epoch
         results['best_val_loss'] = best_val_loss
-        results['best_train_loss'] = compute_loss_on_batch(best_model, train_dloader)
+        results['best_train_loss'] = compute_loss_on_batch(best_model, train_dloader,
+                                                           train_params['positive_weight'],
+                                                           train_params['smoothl1_weight'])
         results['final_model'] = {k: v.cpu().numpy() for k, v in net.state_dict().items()}
-        results['final_val_loss'] = val_loss_
-        results['final_train_loss'] = compute_loss_on_batch(net, train_dloader)
+        results['final_val_loss'] = epoch_val_loss
+        results['final_train_loss'] = compute_loss_on_batch(net, train_dloader,
+                                                            train_params['positive_weight'],
+                                                            train_params['smoothl1_weight'])
         self.insert1(results)
 
     def load_model(key, best_or_final='best'):
@@ -323,7 +338,7 @@ def compute_loss(scores, scores_lbl, proposals, proposals_lbl, probs, probs_lbl,
     return loss
 
 
-def compute_loss_on_batch(net, dataloader):
+def compute_loss_on_batch(net, dataloader, rpn_pos_weight, smoothl1_weight):
     """ Compute average loss over examples in a dataloader. """
     training_mode = net.training
     net.eval()
@@ -347,8 +362,8 @@ def compute_loss_on_batch(net, dataloader):
             loss = compute_loss(scores, ~torch.isnan(anchor_bboxes[:, 0]), proposals,
                                 anchor_bboxes, probs, ~torch.isnan(roi_bboxes[:, 0]),
                                 bboxes, roi_bboxes, masks, roi_masks,
-                                rpn_pos_weight=params['positive_weight'],
-                                smoothl1_weight=params['smoothl1_weight'])
+                                rpn_pos_weight=rpn_pos_weight,
+                                smoothl1_weight=smoothl1_weight)
             total_loss += loss.item()
     loss = total_loss / len(dataloader)
 
