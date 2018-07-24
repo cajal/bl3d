@@ -165,8 +165,8 @@ class TrainedModel(dj.Computed):
                     final_val_loss = compute_loss_on_batch(net, val_dloader,
                                                            train_params['positive_weight'],
                                                            train_params['smoothl1_weight'])
-                    results['final_val_loss'] = mysql_float(final_val_loss)
                     net.num_proposals = train_params['train_num_proposals']
+                    results['final_val_loss'] = mysql_float(final_val_loss)
                     final_train_loss = compute_loss_on_batch(net, train_dloader,
                                                              train_params['positive_weight'],
                                                              train_params['smoothl1_weight'])
