@@ -41,12 +41,12 @@ class TrainingParams(dj.Lookup):
         search_params = itertools.product([0.001, 0.01, 0.1], [1e-5, 1e-4, 1e-3], [1, 10])
         for id_, (lr, lambda_, sl1_weight) in enumerate(search_params, start=1):
             yield {'training_id': id_, 'learning_rate': lr, 'weight_decay': lambda_,
-                   'smoothl1_weight': sl1_weight, 'seed': 1234, 'train_crop_size': 96,
-                   'val_crop_size': 160, 'enhanced_input': False, 'anchor_size_d': 15,
-                   'anchor_size_w': 9, 'anchor_size_h': 9, 'train_num_proposals': 640,
-                   'val_num_proposals': 1536, 'nms_iou': 0.5, 'roi_size_d': 12,
-                   'roi_size_h': 12, 'roi_size_w': 12, 'momentum': 0.9, 'num_epochs': 160,
-                   'lr_decay': 0.1, 'lr_schedule': (100, 140), 'positive_weight': 5}
+                   'smoothl1_weight': sl1_weight, 'seed': 1234, 'train_crop_size': 128,
+                   'val_crop_size': 196, 'enhanced_input': False, 'anchor_size_d': 15,
+                   'anchor_size_w': 9, 'anchor_size_h': 9, 'train_num_proposals': 1024,
+                   'val_num_proposals': 2048, 'nms_iou': 0.5, 'roi_size_d': 12,
+                   'roi_size_h': 12, 'roi_size_w': 12, 'momentum': 0.9, 'num_epochs': 140,
+                   'lr_decay': 0.1, 'lr_schedule': (100, 130), 'positive_weight': 5}
 
 
 @schema
@@ -75,7 +75,6 @@ class DenseNet(dj.Lookup):
     growth_rate:        tinyint         # how many feature maps to add each layer
     kernel_sizes:       tinyblob        # list with kernel sizes (one per layer)
     dilation:           tinyblob        # list with dilation (one per layer)
-    padding:            tinyblob        # list with padding amounts (one per layer)
     stride:             tinyblob        # list with strides (one per layer)
     use_batchnorm:      boolean         # whether to use batch normalization
     """
@@ -93,7 +92,6 @@ class RPN(dj.Lookup):
     num_features:       tinyblob        # number of feature maps per layer
     kernel_sizes:       tinyblob        # list with kernel sizes (one per layer)
     dilation:           tinyblob        # list with dilation (one per layer)
-    padding:            tinyblob        # list with padding amounts (one per layer)
     stride:             tinyblob        # list with strides (one per layer)
     use_batchnorm:      boolean         # whether to use batch normalization
     """
@@ -112,12 +110,11 @@ class Bbox(dj.Lookup):
     avg_pool:           tinyint         # average pool after this layer
     kernel_sizes:       tinyblob        # list with kernel sizes (one per conv layer)
     dilation:           tinyblob        # list with dilation (one per conv layer)
-    padding:            tinyblob        # list with padding amounts (one per conv layer)
     stride:             tinyblob        # list with strides (one per conv layer)
     use_batchnorm:      boolean         # whether to use batch normalization
     """
     contents = [
-        [1, (64, 64, 64, 128, 7), 3, (3, 3, 3), (1, 1, 1), (1, 2, 1), True]
+        [1, (48, 48, 48, 96, 7), 3, (3, 3, 3), (1, 1, 1), (1, 2, 1), True]
     ]
 
 
@@ -130,13 +127,11 @@ class FCN(dj.Lookup):
     num_features:       tinyblob        # number of feature maps per layer
     kernel_sizes:       tinyblob        # list with kernel sizes (one per layer)
     dilation:           tinyblob        # list with dilation (one per layer)
-    padding:            tinyblob        # list with padding amounts (one per layer)
     stride:             tinyblob        # list with strides (one per layer)
     use_batchnorm:      boolean         # whether to use batch normalization
     """
     contents = [
-        [1, (64, 64, 96, 96, 128, 1), (3, 3, 3, 3, 1, 1), (1, 1, 2, 2, 1, 1),
-         (1, 1, 1, 1, 1, 1), True]
+        [1, (48, 48, 48, 96, 1), (3, 3, 3, 1, 1), (1, 2, 2, 1, 1), (1, 1, 1, 1, 1), True]
     ]
 
 

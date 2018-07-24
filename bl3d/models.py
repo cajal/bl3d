@@ -29,7 +29,7 @@ class DenseNet(nn.Module):
     Input: N x 1 x D x H x W
     Output: N x 41 x D x H x W
     Effective receptive field: 17 x 17 x 17
-    # params: 18 568
+    # params: 18 536
     """
     version = 1
 
@@ -68,7 +68,7 @@ class RPN(nn.Module):
     Input: N x 41 x D x H x W
     Output: (N x D x H x W, N x 6 x D x H x W)
     Effective receptive field: 7 x 7 x 7
-    # params: 56 999
+    # params: 56 887
     """
     version = 1
 
@@ -101,28 +101,28 @@ class Bbox(nn.Module):
     """ Refine proposals made by the RPN.
 
     A standard convnet architecture:
-        CONV(64) -> CONV(64)* -> CONV(64) -> AVGPOOL -> FC(128) -> FC(7)
+        CONV(48) -> CONV(48)* -> CONV(48) -> AVGPOOL -> FC(96) -> FC(7)
     * This convolution has stride 2. It reduces the spatial dimensions of the volume by a
     factor of two.
 
     Input: N x 41 x D x H x W (D, H and W need to be even)
     Output: (N, N x 6)
     Effective receptive field: D x H x W
-    # params: 302 087
+    # params: 183 319
     """
     version = 1
 
     def __init__(self):
         super().__init__()
-        self.conv1 = nn.Conv3d(41, 64, 3, bias=False)
-        self.bn1 = nn.BatchNorm3d(64)
-        self.conv2 = nn.Conv3d(64, 64, 3, stride=2, bias=False) # 2x downsampling
-        self.bn2 = nn.BatchNorm3d(64)
-        self.conv3 = nn.Conv3d(64, 64, 3, bias=False)
-        self.bn3 = nn.BatchNorm1d(64)
-        self.fc1 = nn.Linear(64, 128, bias=False)
-        self.bn4 = nn.BatchNorm1d(128)
-        self.fc2 = nn.Linear(128, 7)
+        self.conv1 = nn.Conv3d(41, 48, 3, bias=False)
+        self.bn1 = nn.BatchNorm3d(48)
+        self.conv2 = nn.Conv3d(48, 48, 3, stride=2, bias=False) # 2x downsampling
+        self.bn2 = nn.BatchNorm3d(48)
+        self.conv3 = nn.Conv3d(48, 48, 3, bias=False)
+        self.bn3 = nn.BatchNorm1d(48)
+        self.fc1 = nn.Linear(48, 96, bias=False)
+        self.bn4 = nn.BatchNorm1d(96)
+        self.fc2 = nn.Linear(96, 7)
 
     def forward(self, input_):
         a1 = F.relu(self.bn1(self.conv1(input_)), inplace=True)
@@ -146,39 +146,36 @@ class Bbox(nn.Module):
 class FCN(nn.Module):
     """ Segment each proposed region.
 
-    A six-layer fully convolutional neural network: first four layers use a 3 x 3 filter
-    (dilation 2 in layer 3 and 4), last 2 use a 1x1 filter. Feature maps: 64 -> 64 -> 96
-    -> 96 -> 128 -> 1.
+    A five-layer fully convolutional neural network:
+        CONV(48) -> CONV(48)* -> CONV(48)* -> FC(96) -> FC(1)
+    * This convolutions have dilation 2 to increase receptive field.
 
     Input: N x 41 x D x H x W
     Output: N x D x H x W
-    Effective receptive field: 13 x 13 x 13
-    # params: 609 921
+    Effective receptive field: 11 x 11 x 11
+    # params: 182 737
     """
     version = 1
 
     def __init__(self):
         super().__init__()
-        self.conv1 = nn.Conv3d(41, 64, 3, bias=False)
-        self.bn1 = nn.BatchNorm3d(64)
-        self.conv2 = nn.Conv3d(64, 64, 3, bias=False)
-        self.bn2 = nn.BatchNorm3d(64)
-        self.conv3 = nn.Conv3d(64, 96, 3, dilation=2, bias=False)
-        self.bn3 = nn.BatchNorm3d(96)
-        self.conv4 = nn.Conv3d(96, 96, 3, dilation=2, bias=False)
-        self.bn4 = nn.BatchNorm3d(96)
-        self.fc1 = nn.Conv3d(96, 128, 1, bias=False)
-        self.bn5 = nn.BatchNorm3d(128)
-        self.fc2 = nn.Conv3d(128, 1, 1)
+        self.conv1 = nn.Conv3d(41, 48, 3, bias=False)
+        self.bn1 = nn.BatchNorm3d(48)
+        self.conv2 = nn.Conv3d(48, 48, 3, dilation=2, bias=False)
+        self.bn2 = nn.BatchNorm3d(48)
+        self.conv3 = nn.Conv3d(48, 48, 3, dilation=2, bias=False)
+        self.bn3 = nn.BatchNorm3d(48)
+        self.fc1 = nn.Conv3d(48, 96, 1, bias=False)
+        self.bn5 = nn.BatchNorm3d(96)
+        self.fc2 = nn.Conv3d(96, 1, 1)
 
     def forward(self, input_):
-        padded = F.pad(input_, (6,) * 6, mode='replicate')
+        padded = F.pad(input_, (5,) * 6, mode='replicate')
         a1 = F.relu(self.bn1(self.conv1(padded)), inplace=True)
         a2 = F.relu(self.bn2(self.conv2(a1)), inplace=True)
         a3 = F.relu(self.bn3(self.conv3(a2)), inplace=True)
-        a4 = F.relu(self.bn4(self.conv4(a3)), inplace=True)
-        a5 = F.relu(self.bn5(self.fc1(a4)), inplace=True)
-        out = self.fc2(a5)
+        a4 = F.relu(self.bn5(self.fc1(a3)), inplace=True)
+        out = self.fc2(a4)
         return out[:, 0]
 
     def init_parameters(self):
@@ -204,7 +201,7 @@ class MaskRCNN(nn.Module):
             refinement branch and mask branch. This changes during evaluation; see
             forward_eval().
     """
-    def __init__(self, anchor_size=(15, 9, 9), roi_size=(14, 14, 14), nms_iou=0.5,
+    def __init__(self, anchor_size=(15, 9, 9), roi_size=(12, 12, 12), nms_iou=0.5,
                  num_proposals=1024):
         super().__init__()
 
