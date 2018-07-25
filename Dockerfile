@@ -12,7 +12,7 @@ RUN apt-get update && \
 # Install Python 3
 RUN apt-get update && \
     apt-get install -y python3-dev python3-pip python3-tk && \
-    pip3 install numpy scipy matplotlib ipython
+    pip3 install numpy scipy matplotlib ipython jupyterlab
 
 # Install pytorch 
 RUN pip3 install http://download.pytorch.org/whl/cu91/torch-0.4.0-cp35-cp35m-linux_x86_64.whl && \

@@ -13,3 +13,25 @@ services:
     entrypoint: /bin/bash
     working_dir: /home/
     ipc: host # needed for multiprocessing (dataloader) in pytorch
+
+  notebook:
+    image: ecobost/bl3d
+    ports:
+      - "8888:8888"
+    volumes:
+      - .:/src/bl3d/
+      - /tmp/:/tmp/
+      - /mnt/:/mnt/
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - DISPLAY=$DISPLAY
+    env_file: .env
+    entrypoint:
+      - jupyter 
+      - lab
+      - --ip=0.0.0.0
+      - --allow-root
+      - --NotebookApp.token=''
+      - --no-browser 
+    working_dir: /src/bl3d
+    ipc: host # needed for multiprocessing (dataloader) in pytorch
