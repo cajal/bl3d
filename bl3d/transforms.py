@@ -31,9 +31,9 @@ class RandomCrop:
         slices = tuple(slice(st, st + siz) for st, siz in zip(start, self.size))
 
         # Crop
-        cropped_volume = example[0][(Ellipsis, *slices)]
+        cropped_volume = example[0][(..., *slices)]
         cropped_label = example[1][slices]
-        cropped_abbox = example[3][(Ellipsis, *slices)]
+        cropped_abbox = example[3][(..., *slices)]
 
         # Relabel cells in cropped volume to be 1, ..., num_cells_in_cropped_label
         old_ids = np.delete(np.unique(cropped_label), 0)
