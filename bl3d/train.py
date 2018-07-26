@@ -142,7 +142,7 @@ class TrainedModel(dj.Computed):
                 train_loss.append(loss.item())
 
                 # Check for divergence
-                if np.isnan(loss.item()) or np.isinf(loss.item()):
+                if torch.isnan(loss) or torch.isinf(loss):
                     log('Error: Loss diverged!')
                     del (volume, label, cell_bboxes, anchor_bboxes, scores, proposals,
                          top_proposals, probs, bboxes, masks, roi_bboxes, roi_masks,
@@ -320,10 +320,8 @@ def compute_loss(scores, scores_lbl, proposals, proposals_lbl, probs, probs_lbl,
     from torch.nn import functional as F
 
     # Compute RPN loss
-    weights = torch.ones_like(scores)
-    weights[scores_lbl] = rpn_pos_weight
     rpn_class_loss = F.binary_cross_entropy_with_logits(scores, scores_lbl.float(),
-                                                        weight=weights)
+                                                        pos_weight=rpn_pos_weight)
     if scores_lbl.any():
         rpn_bbox_loss = F.smooth_l1_loss(proposals.transpose(0, 1)[:, scores_lbl],
                                          proposals_lbl.transpose(0, 1)[:, scores_lbl])

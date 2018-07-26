@@ -1,4 +1,4 @@
-FROM nvidia/cuda:9.1-cudnn7-devel
+FROM nvidia/cuda:9.2-cudnn7-devel
 
 LABEL maintainer="Erick Cobos <ecobos@bcm.edu>"
 
@@ -15,7 +15,7 @@ RUN apt-get update && \
     pip3 install numpy scipy matplotlib ipython jupyterlab
 
 # Install pytorch 
-RUN pip3 install http://download.pytorch.org/whl/cu91/torch-0.4.0-cp35-cp35m-linux_x86_64.whl && \
+RUN pip3 install http://download.pytorch.org/whl/cu92/torch-0.4.1-cp35-cp35m-linux_x86_64.whl && \
     pip3 install torchvision
 
 # Install pytorch (from source, takes ~1h)
