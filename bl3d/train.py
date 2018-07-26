@@ -226,7 +226,7 @@ class TrainedModel(dj.Computed):
         net = models.MaskRCNN(anchor_size=tuple(train_params['anchor_size_' + d] for d in 'dhw'),
                               roi_size=tuple(train_params['roi_size_' + d] for d in 'dhw'),
                               nms_iou=train_params['nms_iou'],
-                              num_proposals=train_params['num_proposals'])
+                              num_proposals=train_params['train_num_proposals'])
         if ((net.core.version, net.rpn.version, net.bbox.version, net.fcn.version) !=
             (params.ModelParams & key).fetch1('core_version', 'rpn_version',
                                               'bbox_version', 'fcn_version')):
