@@ -201,7 +201,7 @@ class MaskRCNN(nn.Module):
             refinement branch and mask branch. This changes during evaluation; see
             forward_eval().
     """
-    def __init__(self, anchor_size=(15, 9, 9), roi_size=(12, 12, 12), nms_iou=0.5,
+    def __init__(self, anchor_size=(15, 9, 9), roi_size=(12, 12, 12), nms_iou=0.25,
                  num_proposals=1024):
         super().__init__()
 
@@ -259,7 +259,7 @@ class MaskRCNN(nn.Module):
         self.bbox.init_parameters()
         self.fcn.init_parameters()
 
-    def forward_eval(self, input_, eval_proposals, eval_masks):
+    def forward_eval(self, input_, num_proposals, num_final_masks, block_size=160):
         """ Forward used during evaluation. This is non-differentiable.
 
         Information flow changes during evaluation: full size stacks will overflow memory
@@ -269,8 +269,11 @@ class MaskRCNN(nn.Module):
 
         Arguments:
             input_: A 1 x 1 x D x H x W tensor. Input volume.
-            eval_proposals: Number of proposals to select after the RPN.
-            eval_masks: Number of refined bboxes that will go through the mask branch.
+            num_proposals: Number of proposals to select after the RPN.
+            num_final_masks: Number of refined bboxes that will go through the mask
+                branch.
+            chunk_size: An int. Size of the chunks to send through the core + rpn
+                branches. Same size for all dimensions.
 
         Returns:
             top_probs: A NMASKS vector. Logits for each of the final detections.
@@ -278,19 +281,42 @@ class MaskRCNN(nn.Module):
             top_masks: A list of (Di x Hi x Wi) arrays. Heatmap of logits for each final
                 detection resampled to match each mask's size in the original image.
         """
-        # Get intermediate representation
-        hidden = self.core(input_)
-        #TODO: hidden = forward_on_big_input(self.core, input_, out_channels=41, block_size=256, padding=10)
+        import itertools
+
+        # Get intermediate representation and proposals (run in chunks)
+        hidden = torch.empty(input_.shape[0], 41, *input_.shape[2:])
+        scores = torch.empty(input_.shape[0], *input_.shape[2:])
+        proposals = torch.empty(input_.shape[0], 6, *input_.shape[2:])
+
+        padding = 12 # padding performed by the network, discarded of each output chunk
+        for coords in itertools.product(*[range(0, d, block_size - 2 * padding) for d in
+                                          input_.shape[2:]]):
+            # Get next chunk
+            cut_slices = [slice(c, c + block_size) for c in coords]
+            chunk = input_[(..., *cut_slices)]
+
+            # Forward
+            chunk_hidden = self.core(chunk)
+            chunk_scores, chunk_proposals = self.rpn(chunk_hidden)
+
+            # Assign to output dropping padded amount (special treatment for first chunk)
+            full_slices = [slice(0 if sl.start == 0 else sl.start + padding, sl.stop)
+                             for sl in cut_slices]
+            chunk_slices = [slice(0 if sl.start == 0 else padding, None) for sl in cut_slices]
+            hidden[(..., *full_slices)] = chunk_hidden[(..., *chunk_slices)]
+            scores[(..., *full_slices)] = chunk_scores[(..., *chunk_slices)]
+            proposals[(..., *full_slices)] = chunk_proposals[(..., *chunk_slices)]
+
+            del chunk_hidden, chunk_scores, chunk_proposals
 
         # Get top-k proposals (after NMS)
-        scores, proposals = self.rpn(hidden) # n x d x h x w, n x 6 x d x h x w
-        abs_proposals = deparametrize_rpn_proposals(proposals.detach().cpu().numpy(),
-                                                    self.anchor_size)
-        _, top_proposals = non_maximum_suppression(abs_proposals, scores.detach().cpu().numpy(),
-                                                   self.nms_iou, stop_after=eval_proposals)
+        abs_proposals = deparametrize_rpn_proposals(proposals.numpy(), self.anchor_size)
+        _, top_proposals = non_maximum_suppression(abs_proposals, scores.numpy(),
+                                                   self.nms_iou, stop_after=num_proposals)
         del scores, proposals
 
         #TODO: Run in batches over top_proposals (roi_align->bbbox->mask) if it overflows memory
+#TODO: roi_align in CPU
 
         # ROI align
         roi_features = roi_align(hidden, top_proposals[0], self.roi_size)
@@ -305,7 +331,7 @@ class MaskRCNN(nn.Module):
                                            dhw=top_proposals[0][:, 3:])
         top_probs, top_bboxes = non_maximum_suppression(np.expand_dims(abs_bboxes.T, 0),
                                                         np.expand_dims(probs.detach().cpu().numpy(), 0),
-                                                        self.nms_iou, stop_after=eval_masks)
+                                                        self.nms_iou, stop_after=num_final_masks)
         bbox_features = roi_align(hidden, top_bboxes[0], self.roi_size)
         del probs, bboxes, hidden
 
@@ -361,7 +387,7 @@ def _deparametrize_bboxes(bboxes, zyx, dhw):
     return abs_bboxes
 
 
-def non_maximum_suppression(bboxes, scores, nms_iou=0.5, stop_after=5000):
+def non_maximum_suppression(bboxes, scores, nms_iou=0.25, stop_after=5000):
     """ Perform non maximum suppression for 3-D bounding boxes.
 
     Arguments:
@@ -458,62 +484,6 @@ def roi_align(features, bboxes, roi_size):
         roi_features[i] = F.avg_pool3d(F.grid_sample(features, g), 2)
 
     return roi_features
-
-
-def forward_on_big_input(net, volume, block_size=256, padding=32, out_channels=1):
-    """ Passes a big volume through a fully convolutional network dividing it in chunks.
-
-    Arguments:
-        net: A pytorch network.
-        volume: The input to the network (num_examples x num_channels x d1 x d2 x ...).
-        block_size: An int or tuple of ints. Maximum input size for every volume dimension.
-        pad_amount: An int or tuple of ints. Amount of padding performed by the network.
-            We discard an edge of this size out of chunks in the middle of the FOV to
-            avoid padding effects. Better to overestimate.
-        out_channels: Number of channels in the output.
-
-    Returns:
-        output: A tensor (num_examples x out_channels x d1 x d2 x ...) with the output of
-            the network
-
-    Note:
-        Assumes net and volume are in the same device (usually both in GPU).
-        If net is in train mode, each chunk will be batch normalized with diff parameters.
-    """
-    import itertools
-
-    # Get some params
-    spatial_dims = volume.dim() - 2 # number of dimensions after batch and channel
-
-    # Basic checks
-    listify = lambda x: [x] * spatial_dims if np.isscalar(x) else list(x)
-    padding = [int(round(x)) for x in listify(padding)]
-    block_size = [int(round(x)) for x in listify(block_size)]
-    if len(padding) != spatial_dims or len(block_size) != spatial_dims:
-        msg = ('padding and max_size should be a single integer or a sequence of the '
-               'same length as the number of spatial dimensions in the volume.')
-        raise ValueError(msg)
-    if np.any(2 * np.array(padding) >= np.array(block_size)):
-        raise ValueError('Padding needs to be smaller than half max_size.')
-
-    # Evaluate input chunk by chunk
-    output = torch.zeros(volume.shape[0], out_channels, *volume.shape[2:])
-    for initial_coords in itertools.product(*[range(p, d, s - 2 * p) for p, d, s in
-                                              zip(padding, volume.shape[2:], block_size)]):
-        # Cut chunk (it starts at coord - padding)
-        cut_slices = [slice(c - p, c - p + s) for c, p, s in zip(initial_coords, padding, block_size)]
-        chunk = volume[(..., *cut_slices)]
-
-        # Forward
-        out = net(chunk)
-
-        # Assign to output dropping padded amount (special treatment for first chunk)
-        output_slices = [slice(0 if sl.start == 0 else c, sl.stop) for c, sl in
-                         zip(initial_coords, cut_slices)]
-        out_slices = [slice(0 if sl.start == 0 else p, None) for p, sl in zip(padding, cut_slices)]
-        output[(..., *output_slices)] = out[(..., *out_slices)]
-
-    return output
 
 
 def quantize_masks(masks, bboxes):
