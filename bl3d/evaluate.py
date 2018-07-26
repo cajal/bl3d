@@ -14,7 +14,7 @@ schema = dj.schema('ecobost_bl3d2', locals())
 
 
 @schema
-class DetectionMetrics(dj.Computed):
+class Metrics(dj.Computed):
     definition = """ # object detection metrics
 
     -> train.TrainedModel
