@@ -387,7 +387,7 @@ def _deparametrize_bboxes(bboxes, zyx, dhw):
 
 
 def non_maximum_suppression(bboxes, scores, nms_iou=0.25, stop_after=5000,
-                            block_size=512):
+                            pivot=250000, block_size=512):
     """ Perform non maximum suppression for 3-D bounding boxes.
 
     Arguments:
@@ -395,7 +395,6 @@ def non_maximum_suppression(bboxes, scores, nms_iou=0.25, stop_after=5000,
         scores: Array (N x d1 x d2 x ...). Scores per bbox to use for NMS.
         nms_iou: Float. IOU used as threshold for suppression.
         stop_after: Int. Stop after finding this number of valid bounding boxes.
-        block_size: Int. We try to add this number of bboxes in a loop.
 
     Returns:
         nms_scores: List of arrays; one per example. Scores of the selected bboxes.
@@ -406,43 +405,51 @@ def non_maximum_suppression(bboxes, scores, nms_iou=0.25, stop_after=5000,
     for one_bboxes, one_scores in zip(bboxes, scores): # run nms per example
         # Reshape bboxes and scores
         one_bboxes = one_bboxes.reshape((6, -1)).T # N x 6
-        one_scores = one_scores.ravel()
+        one_scores = -one_scores.ravel() # minus so sorting puts higher scores first
 
-        # Sort scores, bboxes
-        sort_order = np.argsort(one_scores)[::-1]
-        selected_bboxes = np.empty((0, 6))
         selected_scores = np.empty(0)
-        for ix in range(0, len(sort_order), block_size):
-            # TODO: If using argpartition (and block_size + new possible ones is greater than stop after), order here
-            next_bboxes = one_bboxes[sort_order[ix: ix + block_size]]
-            next_scores = one_scores[sort_order[ix: ix + block_size]]
+        selected_bboxes = np.empty((0, 6))
+        while len(one_scores) > 0  and len(selected_bboxes) < stop_after:
+            # Sort bboxes with scores less than pivot
+            partition_order = np.argpartition(one_scores, pivot)
+            sort_order = partition_order[np.argsort(one_scores[partition_order[:pivot]])]
+            sorted_bboxes = one_bboxes[sort_order]
+            sorted_scores = one_scores[sort_order]
 
-            # Discard bboxes that overlap highly with a previous bbox
-            ious = compute_ious(next_bboxes, selected_bboxes) # block_size x num_selected
-            good_bboxes = np.all(ious <= nms_iou, axis=-1)
-            next_bboxes = next_bboxes[good_bboxes]
-            next_scores = next_scores[good_bboxes]
+            for ix in range(0, len(sort_order), block_size):
+                next_bboxes = sorted_bboxes[ix: ix + block_size]
+                next_scores = sorted_scores[ix: ix + block_size]
 
-            # Discard bboxes that overlap highly with someone else on the same set
-            set_ious = compute_ious(next_bboxes, next_bboxes)
-            # TODO: When using argpartition, sort and iterate over sorted indices or create a sorted black_ x black matrix. Better: sort bboxes when reading
-            good_bboxes = np.ones(len(next_bboxes), dtype=bool)
-            for i in range(len(next_bboxes)):
-                if good_bboxes[i]:
-                    good_bboxes[i + 1:][set_ious[i, i + 1:] > nms_iou] = False
-            next_bboxes = next_bboxes[good_bboxes]
-            next_scores = next_scores[good_bboxes]
+                # Discard bboxes that overlap highly with a previous bbox
+                ious = compute_ious(next_bboxes, selected_bboxes) # block_size x num_selected
+                good_bboxes = np.all(ious <= nms_iou, axis=-1)
+                next_bboxes = next_bboxes[good_bboxes]
+                next_scores = next_scores[good_bboxes]
 
-            # Join to previously selected bboxes
-            max_required = stop_after - len(selected_bboxes)
-            selected_bboxes = np.concatenate([selected_bboxes, next_bboxes[:max_required]])
-            selected_scores = np.concatenate([selected_scores, next_scores[:max_required]])
+                # Discard bboxes that overlap highly with someone else on the same set
+                ious = compute_ious(next_bboxes, next_bboxes)
+                good_bboxes = np.ones(len(next_bboxes), dtype=bool)
+                for i in range(len(next_bboxes)):
+                    if good_bboxes[i]:
+                        good_bboxes[i + 1:][ious[i, i + 1:] > nms_iou] = False
+                next_bboxes = next_bboxes[good_bboxes]
+                next_scores = next_scores[good_bboxes]
 
-            # Stop if found enough bboxes
-            if len(selected_bboxes) >= stop_after:
-                break
+                # Join to previously selected bboxes
+                max_required = stop_after - len(selected_bboxes)
+                selected_bboxes = np.concatenate([selected_bboxes, next_bboxes[:max_required]])
+                selected_scores = np.concatenate([selected_scores, next_scores[:max_required]])
 
-        nms_scores.append(selected_scores)
+                # Stop if found enough bboxes
+                if len(selected_bboxes) >= stop_after:
+                    break
+
+            # Drop the bboxes that have already been tested
+            if len(selected_bboxes) < stop_after:
+                one_scores = one_scores[partition_order[pivot:]]
+                one_bboxes = one_bboxes[partition_order[pivot:]]
+
+        nms_scores.append(-selected_scores)
         nms_bboxes.append(selected_bboxes)
 
     return nms_scores, nms_bboxes
@@ -461,81 +468,22 @@ def compute_ious(bboxes1, bboxes2):
     # Compute overlap in each dimension
     half_size1 = bboxes1[:, 3:] / 2
     half_size2 = bboxes2[:, 3:] / 2
-    overlaps = []
+    overlaps = np.empty((3, len(bboxes1), len(bboxes2)), dtype=bboxes1.dtype)
     for i in range(3):
-        first_coord = np.maximum.outer(bboxes1[:, i] - half_size1[:, i],
-                                       bboxes2[:, i] - half_size2[:, i]) # N x M
-        last_coord = np.minimum.outer(bboxes1[:, i] + half_size1[:, i],
-                                      bboxes2[:, i] + half_size2[:, i])
-        overlap1d = np.maximum(last_coord - first_coord, 0)
-        overlaps.append(overlap1d)
+        overlaps[i] = (np.minimum.outer(bboxes1[:, i] + half_size1[:, i],
+                                        bboxes2[:, i] + half_size2[:, i]) -
+                       np.maximum.outer(bboxes1[:, i] - half_size1[:, i],
+                                        bboxes2[:, i] - half_size2[:, i]))
 
-    # Compute ious
-    intersection = overlaps[0] * overlaps[1] * overlaps[2]
-    union = np.add.outer(np.prod(bboxes1[:, 3:], axis=-1),
-                         np.prod(bboxes2[:, 3:], axis=-1)) - intersection
-    ious = intersection / union
+    # Compute IOU
+    mask = np.logical_and.reduce(overlaps > 0)
+    intersection = overlaps[0][mask] * overlaps[1][mask] * overlaps[2][mask]
+    union = np.add.outer(bboxes1[:, 3] * bboxes1[:, 4] * bboxes1[:, 5],
+                         bboxes2[:, 3] * bboxes2[:, 4] * bboxes2[:, 5])[mask] - intersection
+    ious = np.zeros(mask.shape, dtype=np.float32)
+    ious[mask] = intersection / union
 
     return ious
-
-
-#def non_maximum_suppression2(bboxes, scores, nms_iou=0.25, stop_after=5000):
-#    """ Perform non maximum suppression for 3-D bounding boxes.
-#
-#    Arguments:
-#        bboxes: Array (N x 6 x d1 x d2 x ...) with bbox coordinates (z, y, x, d, h, w).
-#        scores: Array (N x d1 x d2 x ...). Scores per bbox to use for NMS.
-#        nms_iou: Float. IOU used as threshold for suppression.
-#        stop_after: Int. Stop after finding this number of valid bounding boxes.
-#
-#    Returns:
-#        nms_scores: List of arrays; one per example. Scores of the selected bboxes.
-#        nms_bboxes: List of arrays; one per example (each is NROIS x 6). Selected bboxes.
-#    """
-#    nms_scores = []
-#    nms_bboxes = []
-#    for one_bboxes, one_scores in zip(bboxes, scores): # run nms per example
-#        # Reshape bboxes and scores
-#        one_bboxes = one_bboxes.reshape((6, -1)).T # N x 6
-#        one_scores = one_scores.ravel()
-#
-#        # Save the highest nonoverlapping bboxes
-#        top_indices = []
-#        for next_index in np.argsort(one_scores)[::-1]:
-#            ious = compute_ious2(one_bboxes[next_index], one_bboxes[top_indices])
-#            if np.all(ious < nms_iou):
-#                # Save it
-#                top_indices.append(next_index)
-#                if len(top_indices) >= stop_after:
-#                    break
-#
-#        nms_scores.append(one_scores[top_indices])
-#        nms_bboxes.append(one_bboxes[top_indices])
-#
-#    return nms_scores, nms_bboxes
-#
-#
-#def compute_ious2(bbox, bboxes):
-#    """ Compute iou of bbox with all bboxes.
-#
-#    Arguments:
-#        bbox: Sixtuple: (z, y, x, d, h, w)
-#        bboxes: N x 6 array. N bboxes.
-#
-#    Returns:
-#        ious: An array of size N with the iou between bbox and every bbox in bboxes.
-#    """
-#    # Compute overlap in each dimension
-#    first_coord = np.maximum(bbox[:3] - bbox[3:] / 2, bboxes[:, :3] - bboxes[:, 3:] / 2)
-#    last_coord = np.minimum(bbox[:3] + bbox[3:] / 2, bboxes[:, :3] + bboxes[:, 3:] / 2)
-#    overlap = np.maximum(last_coord - first_coord, 0) # when last_index was after first index
-#
-#    # Compute ious
-#    intersection = np.prod(overlap, axis=-1)
-#    union = np.prod(bboxes[:, 3:], axis=-1) + np.prod(bbox[3:]) - intersection
-#    ious = intersection / union
-#
-#    return ious
 
 
 def roi_align(features, bboxes, roi_size):
