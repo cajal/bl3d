@@ -169,7 +169,7 @@ class EvalParams(dj.Lookup):
     mask_threshold:     float       # probability threshold for mask binarization
     """
     contents = [
-        [1, 0.5, 0.0001, 4, 1.5, 0.5]
+        [1, 0.5, 0.0001, 3, 1.5, 0.5]
     ]
 
 
