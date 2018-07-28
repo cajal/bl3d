@@ -269,12 +269,12 @@ def create_branch_labels(bboxes, roi_size, label, gt_bboxes, iou_thresh=0.5):
     masks = np.zeros((len(bboxes), *roi_size), dtype=bool)
     ious = models.compute_ious(bboxes, gt_bboxes) # N x NOBJECTS
     best_gt_ids = np.argmax(ious, axis=-1) + 1 # object_ids in label start at 1
-    for i, (bbox, best_id) in enumerate(zip(bboxes, best_gt_ids)):
-        if ious[i, best_id - 1] >= iou_thresh:
-            best_bbox = gt_bboxes[best_id - 1]
+    for i, (bbox, best_gt_id) in enumerate(zip(bboxes, best_gt_ids)):
+        if ious[i, best_gt_id - 1] >= iou_thresh:
+            best_gt_bbox = gt_bboxes[best_gt_id - 1]
 
-            par_bboxes[i, :3] = (best_bbox[:3] - bbox[:3]) / bbox[3:]
-            par_bboxes[i, 3:] = np.log(best_bbox[3:] / bbox[3:])
+            par_bboxes[i, :3] = (best_gt_bbox[:3] - bbox[:3]) / bbox[3:]
+            par_bboxes[i, 3:] = np.log(best_gt_bbox[3:] / bbox[3:])
 
             coords = [np.linspace(x - d/2 + d/(2 * rs), x + d/2 - d/(2 * rs), rs) for
                       x, d, rs in zip(bbox[:3], bbox[3:], roi_size)] # roi coordinates
@@ -282,7 +282,7 @@ def create_branch_labels(bboxes, roi_size, label, gt_bboxes, iou_thresh=0.5):
             valid = [np.logical_and(idx >= 0, idx < max_idx) for idx, max_idx in
                      zip(indices, label.shape)]
             valid_label = label[np.ix_(*[idx[val] for idx, val in zip(indices, valid)])]
-            masks[i][np.ix_(*valid)] = (valid_label == best_id)
+            masks[i][np.ix_(*valid)] = (valid_label == best_gt_id)
 
     return par_bboxes, masks
 

@@ -394,7 +394,13 @@ def non_maximum_suppression(bboxes, scores, nms_iou=0.25, stop_after=5000,
         bboxes: Array (N x 6 x d1 x d2 x ...) with bbox coordinates (z, y, x, d, h, w).
         scores: Array (N x d1 x d2 x ...). Scores per bbox to use for NMS.
         nms_iou: Float. IOU used as threshold for suppression.
+
         stop_after: Int. Stop after finding this number of valid bounding boxes.
+        pivot: Number of high score bboxes to process at a time. This is to avoid sorting
+            all bboxes unnecessarily (we take pivot bboxes, sort em, search and repeat).
+        block_size: Once bboxes have been sorted, we take the highest block_size bboxes
+            to search for non-overlapping bboxes (iou < nms_iou with any previous bbox).
+            This is more efficient than searching sequentially.
 
     Returns:
         nms_scores: List of arrays; one per example. Scores of the selected bboxes.
