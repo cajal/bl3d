@@ -132,7 +132,7 @@ class DetectionDataset(Dataset):
         if self.transform is not None:
             example = self.transform(example)
 
-        return tuple(x if torch.is_tensor(x) else torch.from_numpy(x) for x in example)
+        return tuple(torch.as_tensor(x) for x in example)
 
 
 def _boxcar3d(bbox, filter_size, max_dim):

@@ -234,7 +234,7 @@ class TrainedModel(dj.Computed):
 
         # Load state dict from database
         recarray = (TrainedModel & key).fetch1('{}_model'.format(best_or_final))
-        state_dict = {k: torch.from_numpy(recarray[k][0]) for k in recarray.dtype.names}
+        state_dict = {k: torch.as_tensor(np.array(recarray[k][0])) for k in recarray.dtype.names}
         net.load_state_dict(state_dict)
 
         return net
