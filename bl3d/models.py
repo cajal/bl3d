@@ -239,8 +239,10 @@ class MaskRCNN(nn.Module):
         scores, proposals = self.rpn(hidden)
         abs_proposals = deparametrize_rpn_proposals(proposals.detach().cpu().numpy(),
                                                     self.anchor_size)
-        _, top_proposals = non_maximum_suppression(abs_proposals, scores.detach().cpu().numpy(),
-                                                   self.nms_iou, stop_after=self.num_proposals)
+        _, top_proposals = non_maximum_suppression(abs_proposals,
+                                                   scores.detach().cpu().numpy(),
+                                                   self.nms_iou,
+                                                   stop_after=self.num_proposals)
 
         # ROI align
         roi_features = roi_align(hidden, top_proposals[0], self.roi_size) # NROIS x C x D x H x W
@@ -259,7 +261,8 @@ class MaskRCNN(nn.Module):
         self.bbox.init_parameters()
         self.fcn.init_parameters()
 
-    def forward_eval(self, input_, num_proposals, num_final_masks, block_size=160):
+    def forward_eval(self, input_, num_proposals, num_final_masks, block_size=160,
+                     bbox_batch_size=1000):
         """ Forward used during evaluation. This is non-differentiable.
 
         Information flow changes during evaluation: full size stacks will overflow memory
@@ -272,8 +275,11 @@ class MaskRCNN(nn.Module):
             num_proposals: Number of proposals to select after the RPN.
             num_final_masks: Number of refined bboxes that will go through the mask
                 branch.
+
             block_size: An int. Size of the chunks to send through the core + rpn
                 branches. Same size in all dimensions.
+            bbox_batch_size: An int. Number of bboxes to pass through the bbox and mask
+                branch at a time.
 
         Returns:
             top_probs: A NMASKS vector. Logits for each of the final detections.
@@ -284,6 +290,7 @@ class MaskRCNN(nn.Module):
         import itertools
 
         # Get intermediate representation and proposals (run in chunks)
+        print('Getting proposals')
         hidden = torch.empty(input_.shape[0], 41, *input_.shape[2:])
         scores = torch.empty(input_.shape[0], *input_.shape[2:])
         proposals = torch.empty(input_.shape[0], 6, *input_.shape[2:])
@@ -310,36 +317,50 @@ class MaskRCNN(nn.Module):
             del chunk_hidden, chunk_scores, chunk_proposals
 
         # Get top-k proposals (after NMS)
+        print('Applying non maximum suppresion on proposals (CPU)')
         abs_proposals = deparametrize_rpn_proposals(proposals.numpy(), self.anchor_size)
         _, top_proposals = non_maximum_suppression(abs_proposals, scores.numpy(),
                                                    self.nms_iou, stop_after=num_proposals)
         del scores, proposals
 
-        #TODO: Run in batches over top_proposals (roi_align->bbbox->mask) if it overflows memory
-#TODO: roi_align in CPU
-
         # ROI align
+        print("Getting proposal's ROIS (CPU)")
         roi_features = roi_align(hidden, top_proposals[0], self.roi_size)
 
-        # Refine bbox
-        probs, bboxes = self.bbox(roi_features) # NROIS, NROIS x 6
+        # Refine bboxes (run in batches)
+        print('Refining bboxes')
+        bbox_device = self.bbox.conv1.weight.device
+        probs = torch.empty(len(roi_features), device=bbox_device)
+        bboxes = torch.empty(len(roi_features), 6, device=bbox_device)
+        for i in range(0, len(roi_features), bbox_batch_size):
+            next_ = slice(i, i + bbox_batch_size)
+            probs[next_], bboxes[next_] = self.bbox(roi_features[next_].to(bbox_device))
         del roi_features
 
         # Get top-k bboxes
+        print('Applying non maximum suppression on bboxes (CPU)')
         abs_bboxes = _deparametrize_bboxes(bboxes.detach().cpu().numpy(),
                                            zyx=top_proposals[0][:, :3],
                                            dhw=top_proposals[0][:, 3:])
-        top_probs, top_bboxes = non_maximum_suppression(np.expand_dims(abs_bboxes.T, 0),
-                                                        np.expand_dims(probs.detach().cpu().numpy(), 0),
+        top_probs, top_bboxes = non_maximum_suppression(abs_bboxes.T[np.newaxis, ...],
+                                                        probs.detach().cpu().numpy()[np.newaxis, ...],
                                                         self.nms_iou, stop_after=num_final_masks)
+        del probs, bboxes
+
+        print("Getting final masks' ROIS (CPU)")
         bbox_features = roi_align(hidden, top_bboxes[0], self.roi_size)
-        del probs, bboxes, hidden
+        del hidden
 
-        # Segment
-        masks = self.fcn(bbox_features)
-        top_masks = quantize_masks(masks.detach().cpu().numpy(), top_bboxes)
+        # Segment (run in batches)
+        print('Segmenting final bboxes')
+        fcn_device = self.fcn.conv1.weight.device
+        masks = torch.empty(len(bbox_features), *bbox_features.shape[-3:], device=fcn_device)
+        for i in range(0, len(bbox_features), bbox_batch_size):
+            next_ = slice(i, i + bbox_batch_size)
+            masks[next_] = self.fcn(bbox_features[next_].to(fcn_device))
+        top_masks = quantize_masks(masks.detach().cpu().numpy(), top_bboxes[0])
 
-        return top_probs, top_bboxes, top_masks
+        return top_probs[0], top_bboxes[0], top_masks
 
 
 def deparametrize_rpn_proposals(bboxes, anchor_size):
@@ -386,8 +407,8 @@ def _deparametrize_bboxes(bboxes, zyx, dhw):
     return abs_bboxes
 
 
-def non_maximum_suppression(bboxes, scores, nms_iou=0.25, stop_after=5000,
-                            pivot=250000, block_size=512):
+def non_maximum_suppression(bboxes, scores, nms_iou, stop_after, pivot=250000,
+                            block_size=512):
     """ Perform non maximum suppression for 3-D bounding boxes.
 
     Arguments:
@@ -417,7 +438,8 @@ def non_maximum_suppression(bboxes, scores, nms_iou=0.25, stop_after=5000,
         selected_bboxes = np.empty((0, 6))
         while len(one_scores) > 0  and len(selected_bboxes) < stop_after:
             # Sort bboxes with scores less than pivot
-            partition_order = np.argpartition(one_scores, pivot)
+            pivot = min(pivot, len(one_scores))
+            partition_order = np.argpartition(one_scores, pivot - 1)
             sort_order = partition_order[np.argsort(one_scores[partition_order[:pivot]])]
             sorted_bboxes = one_bboxes[sort_order]
             sorted_scores = one_scores[sort_order]
