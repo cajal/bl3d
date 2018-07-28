@@ -267,11 +267,11 @@ def create_branch_labels(bboxes, roi_size, label, gt_bboxes, iou_thresh=0.5):
     # Create parametrized bboxes and mask for each bbox
     par_bboxes = np.full_like(bboxes, np.nan)
     masks = np.zeros((len(bboxes), *roi_size), dtype=bool)
-    for i, bbox in enumerate(bboxes):
-        ious = _compute_ious(bbox, gt_bboxes) #TODO: Use models.compute_ious rather than _compute_ious
-        if np.max(ious) >= iou_thresh:
-            best_id = np.argmax(ious) + 1 # object_ids in label start at 1
-            best_bbox = gt_bboxes[np.argmax(ious)]
+    ious = models.compute_ious(bboxes, gt_bboxes) # N x NOBJECTS
+    best_gt_ids = np.argmax(ious, axis=-1) + 1 # object_ids in label start at 1
+    for i, (bbox, best_id) in enumerate(zip(bboxes, best_gt_ids)):
+        if ious[i, best_id - 1] >= iou_thresh:
+            best_bbox = gt_bboxes[best_id - 1]
 
             par_bboxes[i, :3] = (best_bbox[:3] - bbox[:3]) / bbox[3:]
             par_bboxes[i, 3:] = np.log(best_bbox[3:] / bbox[3:])
@@ -285,29 +285,6 @@ def create_branch_labels(bboxes, roi_size, label, gt_bboxes, iou_thresh=0.5):
             masks[i][np.ix_(*valid)] = (valid_label == best_id)
 
     return par_bboxes, masks
-
-
-def _compute_ious(bbox, bboxes):
-    """ Compute iou of bbox with all bboxes.
-
-    Arguments:
-        bbox: Sixtuple: (z, y, x, d, h, w)
-        bboxes: N x 6 array. N bboxes.
-
-    Returns:
-        ious: An array of size N with the iou between bbox and every bbox in bboxes.
-    """
-    # Compute overlap in each dimension
-    first_coord = np.maximum(bbox[:3] - bbox[3:] / 2, bboxes[:, :3] - bboxes[:, 3:] / 2)
-    last_coord = np.minimum(bbox[:3] + bbox[3:] / 2, bboxes[:, :3] + bboxes[:, 3:] / 2)
-    overlap = np.maximum(last_coord - first_coord, 0) # when last_index was after first index
-
-    # Compute ious
-    intersection = np.prod(overlap, axis=-1)
-    union = np.prod(bboxes[:, 3:], axis=-1) + np.prod(bbox[3:]) - intersection
-    ious = intersection / union
-
-    return ious
 
 
 def compute_loss(scores, scores_lbl, proposals, proposals_lbl, probs, probs_lbl, bboxes,
