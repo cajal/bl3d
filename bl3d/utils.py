@@ -69,7 +69,7 @@ def lcn(image, sigmas=(12, 12)):
 
     We use gaussian filters rather than uniform filters to compute the local mean and std
     to soften the effect of edges. Essentially we are using a fuzzy local neighborhood.
-    Equivalent using a hard defintion of neighborhood will be:
+    Using a hard definition of neighborhood, the equivalent will be:
         local_mean = ndimage.uniform_filter(image, size=(32, 32))
 
     :param np.array image: Array with raw two-photon images.
