@@ -104,3 +104,38 @@ def sharpen_2pimage(image, laplace_sigma=0.7, low_percentile=3, high_percentile=
     norm = (clipped - clipped.mean()) / (clipped.max() - clipped.min() + 1e-7)
 
     return norm
+
+def combine_masks(shape, masks, bboxes, use_ids=True):
+    """ Combines masks into a single 3-d volume using bbox coordinates.
+
+    If two masks are defined in the same voxel, we select the one that appears first in
+    the list.
+
+    Arguments:
+        shape: A tuple. Shape of the full volume.
+        masks: A list of arrays. The masks to combine.
+        bboxes: NMASKS x 2*DIM array. The bbox coordinates of each mask (z, y, x, ..., d, h, w, ...).
+        use_ids: Boolean. Set voxels where mask is positive to the index of the mask.
+
+    Returns:
+        An array with all masks in their respective position.
+    """
+    # Compute masks indices (where to paste them in the output volume)
+    dim = bboxes.shape[1] // 2
+    low_indices = np.round(bboxes[:, :dim] - bboxes[:, dim:] / 2).astype(int) # N x dim
+    high_indices = np.round(bboxes[:, :dim] + bboxes[:, dim:] / 2).astype(int) # N x dim
+    mask_slices = [tuple(slice(max(-l, 0), h - l - max(h - s, 0)) for l, h, s in
+                         zip(low, high, shape)) for low, high in zip(low_indices, high_indices)]
+    full_slices = [tuple(slice(max(l, 0), h) for l, h in zip(low, high)) for low, high in
+                   zip(low_indices, high_indices)]
+
+    # Create combined volume
+    volume = np.zeros(shape, dtype=(int if use_ids else float))
+    for i, mask, sl, mask_sl in zip(range(len(masks), -1, -1), masks[::-1],
+                                    full_slices[::-1], mask_slices[::-1]):
+        if use_ids:
+            volume[sl][mask[mask_sl]] = i + 1 # indices start at 1
+        else:
+            volume[sl] = mask[mask_sl]
+
+    return volume
