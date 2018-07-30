@@ -82,7 +82,7 @@ class Metrics(dj.Computed):
         net.eval()
 
         # Get dataset
-        examples = (params.TrainingSplit & key).fetch1('{}_examples'.format(key['set']))
+        examples = (params.TrainingSplit & key).fetch1('{}_examples'.format(key['eval_set']))
         enhance_volume = (params.TrainingParams & key).fetch1('enhanced_input')
         dataset = datasets.DetectionDataset(examples, transforms.ContrastNorm(),
                                             enhance_volume, net.anchor_size)
@@ -96,9 +96,9 @@ class Metrics(dj.Computed):
         tps = np.empty([len(acceptance_ious), 0], dtype=bool) # ious x masks, whether mask is a match
         for volume, label, _, _ in dataloader:
             # Compute num_proposals and num_masks to use
-            num_cells = np.prod(volume) * eval_params['cells_per_um']
-            num_proposals = num_cells * eval_params['proposal_factor']
-            num_masks = num_cells * eval_params['mask_factor']
+            num_cells = np.prod(volume.shape) * eval_params['cells_per_um']
+            num_proposals = int(round(num_cells * eval_params['proposal_factor']))
+            num_masks = int(round(num_cells * eval_params['mask_factor']))
 
             # Create instance segmentations
             with torch.no_grad():
@@ -185,7 +185,7 @@ def find_matches(labels, prediction):
         List of (iou, label) pairs.
     """
     res = []
-    for m in np.delete(np.unique(labels[prediction]), 0):
+    for m in filter(lambda x: x != 0, np.unique(labels[prediction])):
         label = labels == m
         union = np.logical_or(label, prediction)
         intersection = np.logical_and(label[union], prediction[union]) # bit faster
