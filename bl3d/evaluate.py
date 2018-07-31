@@ -120,9 +120,9 @@ class Metrics(dj.Computed):
                                                 reverse=True):
                 # Reshape mask to full size
                 full_mask = np.zeros(label.shape, dtype=bool)
-                full_slices = tuple(slice(max(l, 0), h) for l, h in zip(low, high))
-                mask_slices = tuple(slice(max(-l, 0), h - l - max(h - s, 0)) for l, h, s
-                                    in zip(low, high, label.shape))
+                full_slices = tuple(slice(max(l, 0), max(h, 0)) for l, h in zip(low, high))
+                mask_slices = tuple(slice(np.clip(-l, 0, h - l), h - l - np.clip(h - s, 0, h - l))
+                                    for l, h, s in zip(low, high, label.shape))
                 full_mask[full_slices] = mask[mask_slices] > eval_params['mask_threshold']
 
                 # Assign mask to highest overlap match in ground truth label

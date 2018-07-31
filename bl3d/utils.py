@@ -105,6 +105,7 @@ def sharpen_2pimage(image, laplace_sigma=0.7, low_percentile=3, high_percentile=
 
     return norm
 
+
 def combine_masks(shape, masks, bboxes, use_ids=True):
     """ Combines masks into a single 3-d volume using bbox coordinates.
 
@@ -124,10 +125,11 @@ def combine_masks(shape, masks, bboxes, use_ids=True):
     dim = bboxes.shape[1] // 2
     low_indices = np.round(bboxes[:, :dim] - bboxes[:, dim:] / 2).astype(int) # N x dim
     high_indices = np.round(bboxes[:, :dim] + bboxes[:, dim:] / 2).astype(int) # N x dim
-    mask_slices = [tuple(slice(max(-l, 0), h - l - max(h - s, 0)) for l, h, s in
-                         zip(low, high, shape)) for low, high in zip(low_indices, high_indices)]
-    full_slices = [tuple(slice(max(l, 0), h) for l, h in zip(low, high)) for low, high in
+    mask_slices = [tuple(slice(np.clip(-l, 0, h - l), h - l - np.clip(h - s, 0, h - l))
+                         for l, h, s in zip(low, high, shape)) for low, high in
                    zip(low_indices, high_indices)]
+    full_slices = [tuple(slice(max(l, 0), max(h, 0)) for l, h in zip(low, high)) for
+                   low, high in zip(low_indices, high_indices)]
 
     # Create combined volume
     volume = np.zeros(shape, dtype=(int if use_ids else float))
