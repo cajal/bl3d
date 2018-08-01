@@ -1,6 +1,23 @@
 """ Some utility functions. """
 import numpy as np
 
+def list_hash(items):
+    """ Compute the MD5 digest hash for a list.
+
+    Arguments:
+        items: List of items to hash
+
+    Returns:
+        A string. Hash created from items.
+    """
+    import hashlib
+
+    hashed = hashlib.md5()
+    for item in items:
+        hashed.update(str(item).encode())
+
+    return hashed.hexdigest()
+
 
 def create_video(stack, interval=100, repeat_delay=1000):
     """ Create an animation of the stack. Fly-through depth axis.
@@ -62,25 +79,25 @@ def memusage():
             pass # other non-tensor objects
 
 
-def lcn(image, sigmas=(12, 12)):
+def lcn(image, sigmas=(7, 7)):
     """ Local contrast normalization.
 
     Normalize each pixel using mean and stddev computed on a local neighborhood.
 
     We use gaussian filters rather than uniform filters to compute the local mean and std
     to soften the effect of edges. Essentially we are using a fuzzy local neighborhood.
-    Using a hard definition of neighborhood, the equivalent will be:
+    Equivalent using a hard defintion of neighborhood will be:
         local_mean = ndimage.uniform_filter(image, size=(32, 32))
 
-    :param np.array image: Array with raw two-photon images.
-    :param tuple sigmas: List with sigmas per axes to use for the gaussian filter.
-        Smaller values result in more local neighborhoods. 15-30 microns should work fine
+    Arguments:
+        image: Array with raw two-photon images.
+        sigmas: List with sigmas per axes to use for the gaussian filter. Smaller values
+            result in more local neighborhoods. 15-30 microns should work fine
     """
     from scipy import ndimage
 
     local_mean = ndimage.gaussian_filter(image, sigmas)
-    local_std = np.sqrt(ndimage.gaussian_filter(image ** 2, sigmas) -
-                        ndimage.gaussian_filter(image, sigmas) ** 2)
+    local_std = np.sqrt(ndimage.gaussian_filter((image - local_mean)**2, sigmas))
     norm = (image - local_mean) / (local_std + 1e-7)
 
     return norm
@@ -104,40 +121,3 @@ def sharpen_2pimage(image, laplace_sigma=0.7, low_percentile=3, high_percentile=
     norm = (clipped - clipped.mean()) / (clipped.max() - clipped.min() + 1e-7)
 
     return norm
-
-
-def combine_masks(shape, masks, bboxes, use_ids=True):
-    """ Combines masks into a single 3-d volume using bbox coordinates.
-
-    If two masks are defined in the same voxel, we select the one that appears first in
-    the list.
-
-    Arguments:
-        shape: A tuple. Shape of the full volume.
-        masks: A list of arrays. The masks to combine.
-        bboxes: NMASKS x 2*DIM array. The bbox coordinates of each mask (z, y, x, ..., d, h, w, ...).
-        use_ids: Boolean. Set voxels where mask is positive to the index of the mask.
-
-    Returns:
-        An array with all masks in their respective position.
-    """
-    # Compute masks indices (where to paste them in the output volume)
-    dim = bboxes.shape[1] // 2
-    low_indices = np.round(bboxes[:, :dim] - bboxes[:, dim:] / 2).astype(int) # N x dim
-    high_indices = np.round(bboxes[:, :dim] + bboxes[:, dim:] / 2).astype(int) # N x dim
-    mask_slices = [tuple(slice(np.clip(-l, 0, h - l), h - l - np.clip(h - s, 0, h - l))
-                         for l, h, s in zip(low, high, shape)) for low, high in
-                   zip(low_indices, high_indices)]
-    full_slices = [tuple(slice(max(l, 0), max(h, 0)) for l, h in zip(low, high)) for
-                   low, high in zip(low_indices, high_indices)]
-
-    # Create combined volume
-    volume = np.zeros(shape, dtype=(int if use_ids else float))
-    for i, mask, sl, mask_sl in zip(range(len(masks), -1, -1), masks[::-1],
-                                    full_slices[::-1], mask_slices[::-1]):
-        if use_ids:
-            volume[sl][mask[mask_sl]] = i + 1 # indices start at 1
-        else:
-            volume[sl] = mask[mask_sl]
-
-    return volume

@@ -1,135 +1,25 @@
 import datajoint as dj
 import numpy as np
+import bisect
 import torch
+from torch.utils import data
 
-from torch.utils.data import DataLoader
-from torch.nn import functional as F
-
-from bl3d import train
-from bl3d import datasets
-from bl3d import transforms
-from bl3d import params
+from . import train
+from . import datasets
+from . import transforms
+from . import params
 
 
-schema = dj.schema('ecobost_bl3d', locals())
+schema = dj.schema('ecobost_bl3d2', locals())
 
 
 @schema
-class Set(dj.Lookup):
-    definition = """ # set where metrics are computed
-    set:                    varchar(8)
-    """
-    contents = [['train'], ['val']]
-
-
-@schema
-class SegmentationMetrics(dj.Computed):
-    definition = """ # compute cross validation metrics per pixel
-    -> train.TrainedModel
-    -> Set
-    ---
-    best_threshold:         float
-    best_iou:               float
-    best_f1:                float
-    """
-
-    class ThresholdSelection(dj.Part):
-        definition= """ # all thresholds tried
-        -> master
-        ---
-        thresholds:         blob            # all thresholds tried
-        tps:                blob            # true positives
-        fps:                blob            # false positives
-        tns:                blob            # true negatives
-        fns:                blob            # false negatives
-        accuracies:         blob            # accuracy at each threshold
-        precisions:         blob            # precision at each threshold
-        recalls:            blob            # recall/sensitivity at each threshold
-        specificities:      blob            # specificity at each threshold
-        ious:               blob            # iou at each threshold
-        f1s:                blob            # F-1 score at each threshold
-        """
-
-    def make(self, key):
-        print('Evaluating', key)
-
-        # Get model
-        net = train.TrainedModel.load_model(key)
-        net.cuda()
-        net.eval()
-
-        # Get dataset
-        examples = (train.Split() & key).fetch1('{}_examples'.format(key['set']))
-        enhance_input = (params.TrainingParams() & key).fetch1('enhanced_input')
-        dataset = datasets.SegmentationDataset(examples, transforms.ContrastNorm(),
-                                               enhance_input)
-        dataloader = DataLoader(dataset, num_workers=2, pin_memory=True)
-
-        # Iterate over different probability thresholds
-        thresholds = np.linspace(0, 1, 33)
-        tps = []
-        fps = []
-        tns = []
-        fns = []
-        accuracies = []
-        precisions = []
-        recalls = []
-        specificities = []
-        ious = []
-        f1s = []
-        for threshold in thresholds:
-            print('Threshold: {}'.format(threshold))
-
-            confusion_matrix = np.zeros(4) # tp, fp, tn, fn
-            with torch.no_grad():
-                for image, label in dataloader:
-                    # Compute prediction (heatmap of probabilities)
-                    output = forward_on_big_input(net, image.cuda())
-                    prediction = F.softmax(output, dim=1) # 1 x num_classes x depth x height x width
-
-                    # Threshold prediction to create segmentation
-                    segmentation = prediction[0, 1].cpu().numpy() > threshold
-
-                    # Accumulate confusion matrix values
-                    confusion_matrix += compute_confusion_matrix(segmentation,
-                                                                 label[0].numpy())
-
-            # Calculate metrics
-            metrics = compute_metrics(*confusion_matrix)
-
-            # Collect results
-            tps.append(confusion_matrix[0])
-            fps.append(confusion_matrix[1])
-            tns.append(confusion_matrix[2])
-            fns.append(confusion_matrix[3])
-            accuracies.append(metrics[2])
-            precisions.append(metrics[5])
-            recalls.append(metrics[6])
-            specificities.append(metrics[4])
-            ious.append(metrics[0])
-            f1s.append(metrics[1])
-
-            print('IOU:', metrics[0])
-
-        # Insert
-        best_iou = max(ious)
-        best_threshold = thresholds[ious.index(best_iou)]
-        best_f1 = f1s[ious.index(best_iou)]
-        self.insert1({**key, 'best_threshold': best_threshold, 'best_iou': best_iou,
-                      'best_f1': best_f1})
-
-        threshold_metrics = {**key, 'thresholds': thresholds, 'tps': tps, 'fps': fps,
-                             'tns': tns, 'fns':fns, 'accuracies': accuracies,
-                             'precisions': precisions, 'recalls': recalls,
-                             'specificities': specificities, 'ious': ious, 'f1s': f1s}
-        self.ThresholdSelection().insert1(threshold_metrics)
-
-
-@schema
-class DetectionMetrics(dj.Computed):
+class Metrics(dj.Computed):
     definition = """ # object detection metrics
+
     -> train.TrainedModel
-    -> Set
+    -> params.EvalParams
+    -> params.EvalSet
     ---
     map:            float       # mean average precision over all acceptance IOUs (same as COCO's mAP)
     mf1:            float       # mean F1 over all acceptance IOUs
@@ -141,6 +31,7 @@ class DetectionMetrics(dj.Computed):
 
     class PerIOU(dj.Part):
         definition = """ # some metrics computed at a single acceptance IOUs
+
         -> master
         iou:                float       # acceptance iou used
         ---
@@ -181,65 +72,70 @@ class DetectionMetrics(dj.Computed):
                 average all aps -> average precision
             average over all clases -> mean average precision
         """
-        from skimage import measure
-        import itertools
-        import bisect
-
         print('Evaluating', key)
+        eval_params = (params.EvalParams & key).fetch1()
 
         # Get model
         net = train.TrainedModel.load_model(key)
+        net.nms_iou = eval_params['nms_iou']
         net.cuda()
         net.eval()
 
         # Get dataset
-        examples = (train.Split() & key).fetch1('{}_examples'.format(key['set']))
-        enhance_input = (params.TrainingParams() & key).fetch1('enhanced_input')
-        dataset = datasets.SegmentationDataset(examples, transforms.ContrastNorm(),
-                                               enhance_input, binarize_labels=False)
-        dataloader = DataLoader(dataset, num_workers=2, pin_memory=True)
+        examples = (params.TrainingSplit & key).fetch1('{}_examples'.format(key['eval_set']))
+        enhance_volume = (params.TrainingParams & key).fetch1('enhanced_input')
+        dataset = datasets.DetectionDataset(examples, transforms.ContrastNorm(),
+                                            enhance_volume, net.anchor_size)
+        dataloader = data.DataLoader(dataset, num_workers=2, pin_memory=True)
 
-        # Accumulate true positives, false positives and false negatives over images
+        # Accumulate true positives, false positives and false negatives across examples
         acceptance_ious = np.arange(0.5, 1, 0.05)
         num_gt_instances = 0 # number of ground truth instances
         num_pred_instances = 0 # number of predicted masks
         confidences = [] # confidence per predicted mask
         tps = np.empty([len(acceptance_ious), 0], dtype=bool) # ious x masks, whether mask is a match
-        for image, label in dataloader:
-            # Create heatmap of predictions
+        for volume, label, _, _ in dataloader:
+            # Compute num_proposals and num_masks to use
+            num_cells = np.prod(volume.shape) * eval_params['cells_per_um']
+            num_proposals = int(round(num_cells * eval_params['proposal_factor']))
+            num_masks = int(round(num_cells * eval_params['mask_factor']))
+
+            # Create instance segmentations
             with torch.no_grad():
-                output = forward_on_big_input(net, image.cuda())
-                prediction = F.softmax(output, dim=1) # 1 x num_classes x depth x height x width
+                probs, bboxes, masks = net.forward_eval(volume.cuda(), num_proposals,
+                                                        num_masks)
+            probs = 1 / (1 + np.exp(-probs)) # sigmoid
+            masks = [1 / (1 + np.exp(-m)) for m in masks]
+            label = label[0].numpy()
 
-                pred = prediction[0, 1].cpu().numpy()
-                label = label[0].numpy()
+            # Compute limits of each mask (used for slicing below)
+            low_indices = np.round(bboxes[:, :3] - bboxes[:, 3:] / 2).astype(int)
+            high_indices = np.round(bboxes[:, :3] + bboxes[:, 3:] / 2).astype(int)
 
-            # Error if all predictions are the same (no way to segment instances)
-            if np.max(np.abs(pred - pred[0, 0, 0])) < 1e-7:
-                print('Error: All predicted probabilities are the same:', np.mean(pred))
-                self.insert1({**key, 'map': 0, 'mf1': 0, 'ap_50': 0, 'ap_75': 0,
-                              'f1_50': 0, 'f1_75': 0})
-                return
-
-            # Create instance segmentation
-            segmentation = _prob2labels(pred) # labels start at 1 and are sequential
-            probs = [p.mean_intensity for p in measure.regionprops(segmentation, pred)]
-
-            # Match each predicted mask
-            mask_tps = np.zeros([len(acceptance_ious), segmentation.max()], dtype=bool)
+            # Match each predicted mask to a ground truth mask
+            mask_tps = np.zeros([len(acceptance_ious), len(probs)], dtype=bool)
             gt_tps = np.zeros([len(acceptance_ious), label.max()], dtype=bool)
-            for _, mask_idx in sorted(zip(probs, itertools.count(1)), reverse=True):
-                matches = find_matches(label, segmentation == mask_idx)
+            for _, i, mask, low, high in sorted(zip(probs, range(len(probs)), masks,
+                                                    low_indices, high_indices),
+                                                reverse=True):
+                # Reshape mask to full size
+                full_mask = np.zeros(label.shape, dtype=bool)
+                full_slices = tuple(slice(max(l, 0), max(h, 0)) for l, h in zip(low, high))
+                mask_slices = tuple(slice(np.clip(-l, 0, h - l), h - l - np.clip(h - s, 0, h - l))
+                                    for l, h, s in zip(low, high, label.shape))
+                full_mask[full_slices] = mask[mask_slices] > eval_params['mask_threshold']
+
+                # Assign mask to highest overlap match in ground truth label
+                matches = find_matches(label, full_mask)
                 for iou, match in sorted(matches, reverse=True):
                     is_acceptable = iou > acceptance_ious
-                    is_unassigned = np.logical_and(~gt_tps[:, match - 1],
-                                                   ~mask_tps[:, mask_idx - 1])
-                    mask_tps[:, mask_idx - 1] = np.logical_and(is_acceptable, is_unassigned)
+                    is_unassigned = ~np.logical_or(gt_tps[:, match - 1], mask_tps[:, i])
+                    mask_tps[:, i] = np.logical_and(is_acceptable, is_unassigned)
                     gt_tps[:, match - 1] = np.logical_and(is_acceptable, is_unassigned)
 
             # Accumulate results
             num_gt_instances += label.max()
-            num_pred_instances += segmentation.max()
+            num_pred_instances += len(probs)
             confidences.extend(probs)
             tps = np.concatenate([tps, mask_tps], axis=1)
 
@@ -277,74 +173,26 @@ class DetectionMetrics(dj.Computed):
                                    'recall': recall, 'f1': f1})
 
 
-def forward_on_big_input(net, volume, max_size=256, padding=32, out_channels=2):
-    """ Passes a big volume through a network dividing it in chunks.
+def find_matches(labels, prediction):
+    """ Find all labels that intersect with a given predicted mask (and their IOUs).
 
     Arguments:
-        net: A pytorch network.
-        volume: The input to the network (num_examples x num_channels x d1 x d2 x ...).
-        max_size: An int or tuple of ints. Maximum input size for every volume dimension.
-        pad_amount: An int or tuple of ints. Amount of padding performed by the network.
-            We discard an edge of this size out of chunks in the middle of the FOV to
-            avoid padding effects. Better to overestimate.
-        out_channels: Number of channels in the output.
-
-    Note:
-        Assumes net and volume are in the same device (usually both in GPU).
-        If net is in train mode, each chunk will be batch normalized with diff parameters.
-    """
-    import itertools
-
-    # Get some params
-    spatial_dims = volume.dim() - 2 # number of dimensions after batch and channel
-
-    # Basic checks
-    listify = lambda x: [x] * spatial_dims if np.isscalar(x) else list(x)
-    padding = [int(round(x)) for x in listify(padding)]
-    max_size = [int(round(x)) for x in listify(max_size)]
-    if len(padding) != spatial_dims or len(max_size) != spatial_dims:
-        msg = ('padding and max_size should be a single integer or a sequence of the '
-               'same length as the number of spatial dimensions in the volume.')
-        raise ValueError(msg)
-    if np.any(2 * np.array(padding) >= np.array(max_size)):
-        raise ValueError('Padding needs to be smaller than half max_size.')
-
-    # Evaluate input chunk by chunk
-    output = torch.zeros(volume.shape[0], out_channels, *volume.shape[2:])
-    for initial_coords in itertools.product(*[range(p, d, s - 2 * p) for p, d, s in
-                                              zip(padding, volume.shape[2:], max_size)]):
-        # Cut chunk (it starts at coord - padding)
-        cut_slices = [slice(c - p, c - p + s) for c, p, s in zip(initial_coords, padding, max_size)]
-        chunk = volume[(..., *cut_slices)]
-
-        # Forward
-        out = net(chunk)
-
-        # Assign to output dropping padded amount (special treat for first chunk)
-        output_slices = [slice(0 if sl.start == 0 else c, sl.stop) for c, sl in zip(initial_coords, cut_slices)]
-        out_slices = [slice(0 if sl.start == 0 else p, None) for p, sl in zip(padding, cut_slices)]
-        output[(..., *output_slices)] = out[(..., *out_slices)]
-
-    return output
-
-
-def compute_confusion_matrix(segmentation, label):
-    """Confusion matrix for a single image: # of pixels in each category.
-
-    Arguments:
-        segmentation: Boolean array. Predicted segmentation.
-        label: Boolean array. Expected segmentation.
+        labels: Array with zeros for background and positive integers for each ground
+            truth object in the volume.
+        prediction: Boolean array with ones for the predicted mask. Same shape as labels.
 
     Returns:
-        A quadruple with true positives, false positives, true negatives and false
-            negatives
+        List of (iou, label) pairs.
     """
-    true_positive = np.sum(np.logical_and(segmentation, label))
-    false_positive = np.sum(np.logical_and(segmentation, np.logical_not(label)))
-    true_negative = np.sum(np.logical_and(np.logical_not(segmentation), np.logical_not(label)))
-    false_negative = np.sum(np.logical_and(np.logical_not(segmentation), label))
+    res = []
+    for m in filter(lambda x: x != 0, np.unique(labels[prediction])):
+        label = labels == m
+        union = np.logical_or(label, prediction)
+        intersection = np.logical_and(label[union], prediction[union]) # bit faster
+        iou = np.count_nonzero(intersection) / np.count_nonzero(union)
+        res.append((iou, m))
 
-    return (true_positive, false_positive, true_negative, false_negative)
+    return res
 
 
 def compute_metrics(true_positive, false_positive, true_negative, false_negative):
@@ -373,68 +221,3 @@ def compute_metrics(true_positive, false_positive, true_negative, false_negative
     f1 = (2 * precision * recall) / (precision + recall + epsilon)
 
     return iou, f1, accuracy, sensitivity, specificity, precision, recall
-
-
-def _prob2labels(pred):
-    """ Transform voxelwise probabilities from a segmentation to instances.
-
-    Pretty ad hoc. Bunch of numbers were manually chosen.
-
-    Arguments:
-        pred: Array with predicted probabilities.
-
-    Returns:
-        Array with same shape as pred with zero for background and positive integers for
-            each predicted instance.
-    """
-    from skimage import filters, feature, morphology, measure, segmentation
-    from scipy import ndimage
-
-    # Find good binary threshold (may be a bit lower than best possible IOU, catches true cells that weren't labeled)
-    thresh = filters.threshold_otsu(pred)
-
-    # Find local maxima in the prediction heatmap
-    smooth_pred = ndimage.gaussian_filter(pred, 0.7)
-    peaks = feature.peak_local_max(smooth_pred, min_distance=4, threshold_abs=thresh,
-                                   indices=False)
-    markers = morphology.label(peaks)
-
-    # Separate into instances based on distance
-    thresholded = smooth_pred > thresh
-    filled = morphology.remove_small_objects(morphology.remove_small_holes(thresholded), 65) # volume of sphere with diameter 5
-    distance = ndimage.distance_transform_edt(filled)
-    distance += 1e-7 * np.random.random(distance.shape) # to break ties
-    label = morphology.watershed(-distance, markers, mask=filled)
-    print(label.max(), 'initial cells')
-
-    # Remove masks that are too small or too large
-    label = morphology.remove_small_objects(label, 65)
-    too_large = [p.label for p in measure.regionprops(label) if p.area > 4189]
-    for label_id in too_large:
-        label[label == label_id] = 0 # set to background
-    label, _, _ = segmentation.relabel_sequential(label)
-    print(label.max(), 'final cells')
-
-    return label
-
-
-def find_matches(labels, prediction):
-    """ Find all labels that intersect with a given predicted mask (and their IOUs).
-
-    Arguments:
-        labels: Array with zeros for background and positive integers for each ground
-            truth object in the volume.
-        prediction: Boolean array with ones for the predicted mask. Same shape as labels.
-
-    Returns:
-        List of (iou, label) pairs.
-    """
-    res = []
-    for m in np.delete(np.unique(labels[prediction]), 0):
-        label = labels == m
-        union = np.logical_or(label, prediction)
-        intersection = np.logical_and(label[union], prediction[union]) # bit faster
-        iou = np.count_nonzero(intersection) / np.count_nonzero(union)
-        res.append((iou, m))
-
-    return res

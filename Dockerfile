@@ -1,4 +1,4 @@
-FROM nvidia/cuda:9.1-cudnn7-devel
+FROM nvidia/cuda:9.2-cudnn7-devel
 
 LABEL maintainer="Erick Cobos <ecobos@bcm.edu>"
 
@@ -12,10 +12,10 @@ RUN apt-get update && \
 # Install Python 3
 RUN apt-get update && \
     apt-get install -y python3-dev python3-pip python3-tk && \
-    pip3 install numpy scipy matplotlib ipython
+    pip3 install numpy scipy matplotlib ipython jupyterlab
 
 # Install pytorch 
-RUN pip3 install http://download.pytorch.org/whl/cu91/torch-0.4.0-cp35-cp35m-linux_x86_64.whl && \
+RUN pip3 install http://download.pytorch.org/whl/cu92/torch-0.4.1-cp35-cp35m-linux_x86_64.whl && \
     pip3 install torchvision
 
 # Install pytorch (from source, takes ~1h)
@@ -25,7 +25,7 @@ RUN pip3 install http://download.pytorch.org/whl/cu91/torch-0.4.0-cp35-cp35m-lin
 #    pip3 install torchvision
 
 # Install datajoint
-RUN pip3 install datajoint
+RUN apt-get install -y libssl-dev && pip3 install datajoint
 
 # Install bl3d
 ADD . /src/bl3d

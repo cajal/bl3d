@@ -1,6 +1,3 @@
-__version__ = '0.1.0'
-
-
 import os
 
 # Switch matplotlib backend if display is not set up correctly
