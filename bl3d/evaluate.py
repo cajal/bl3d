@@ -109,8 +109,8 @@ class Metrics(dj.Computed):
             label = label[0].numpy()
 
             # Compute limits of each mask (used for slicing below)
-            low_indices = np.round(bboxes[:, :3] - bboxes[:, 3:] / 2).astype(int)
-            high_indices = np.round(bboxes[:, :3] + bboxes[:, 3:] / 2).astype(int)
+            low_indices = np.round(bboxes[:, :3] - bboxes[:, 3:] / 2 + 1e-7).astype(int)
+            high_indices = np.round(bboxes[:, :3] + bboxes[:, 3:] / 2 + 1e-7).astype(int)
 
             # Match each predicted mask to a ground truth mask
             mask_tps = np.zeros([len(acceptance_ious), len(probs)], dtype=bool)
