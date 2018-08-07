@@ -50,8 +50,8 @@ class DetectionDataset(Dataset):
         # Get volumes
         volumes_rel = data.Stack.Volume & [{'example_id': id_} for id_ in examples]
         volumes = volumes_rel.fetch('volume', order_by='example_id')
-        if enhance_volume: # local contrast normalization -> sharpening
-            volumes = [utils.sharpen_2pimage(utils.lcn(v, (3, 25, 25))) for v in volumes]
+        if enhance_volume: # local contrast normalization
+            volumes = [utils.lcn(v, (3, 25, 25)) for v in volumes]
         self.volumes = [np.expand_dims(volume, 0) for volume in volumes] # add channel dimension
 
         # Get labels

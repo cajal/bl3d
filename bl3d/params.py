@@ -38,11 +38,12 @@ class TrainingParams(dj.Lookup):
     @property
     def contents(self):
         import itertools
-        search_params = itertools.product([0.001, 0.01, 0.1], [1e-5, 1e-4, 1e-3], [1, 10])
-        for id_, (lr, lambda_, sl1_weight) in enumerate(search_params, start=1):
+        search_params = itertools.product([0.001, 0.01, 0.1], [1e-5, 1e-4, 1e-3],
+                                          [1, 10], [False, True])
+        for id_, (lr, lambda_, sl1_weight, ei) in enumerate(search_params, start=1):
             yield {'training_id': id_, 'learning_rate': lr, 'weight_decay': lambda_,
-                   'smoothl1_weight': sl1_weight, 'seed': 1234, 'train_crop_size': 128,
-                   'val_crop_size': 192, 'enhanced_input': False, 'anchor_size_d': 15,
+                   'smoothl1_weight': sl1_weight, 'enhanced_input': ei, 'seed': 1234,
+                   'train_crop_size': 128, 'val_crop_size': 192, 'anchor_size_d': 15,
                    'anchor_size_w': 9, 'anchor_size_h': 9, 'train_num_proposals': 1024,
                    'val_num_proposals': 2048, 'nms_iou': 0.25, 'roi_size_d': 12,
                    'roi_size_h': 12, 'roi_size_w': 12, 'momentum': 0.9, 'num_epochs': 140,
