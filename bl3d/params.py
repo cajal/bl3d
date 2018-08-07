@@ -38,9 +38,9 @@ class TrainingParams(dj.Lookup):
     @property
     def contents(self):
         import itertools
-        search_params = itertools.product([0.001, 0.01, 0.1], [1e-5, 1e-4, 1e-3],
-                                          [1, 10], [False, True])
-        for id_, (lr, lambda_, sl1_weight, ei) in enumerate(search_params, start=1):
+        search_params = itertools.product([False, True], [0.001, 0.01, 0.1],
+                                          [1e-5, 1e-4, 1e-3], [1, 10])
+        for id_, (ei, lr, lambda_, sl1_weight) in enumerate(search_params, start=1):
             yield {'training_id': id_, 'learning_rate': lr, 'weight_decay': lambda_,
                    'smoothl1_weight': sl1_weight, 'enhanced_input': ei, 'seed': 1234,
                    'train_crop_size': 128, 'val_crop_size': 192, 'anchor_size_d': 15,
