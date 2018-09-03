@@ -25,10 +25,10 @@ class DetectionDataset(Dataset):
 
     Returns:
         A (volume, label, centroids) tuple:
-            volume (FloatTensor): A 1 x d x h x w tensor: green channel of the stack.
-            label (IntTensor) A d x h x w tensor: voxelwise cell ids. Non-cell/background
-                voxels have value 0. Cells have consecutive positive integers.
-            centroids (ByteTensor): A d x h x w tensor: centroids of all cells.
+            volume (float32 array): A 1 x d x h x w tensor: green channel of the stack.
+            label (uint8 or int32 array) A d x h x w array: voxelwise cell ids. Non-cell/
+                background voxels have value 0. Cells have consecutive positive integers.
+            centroids (uint8 array): A d x h x w array: centroids of all cells.
     """
 
     def __init__(self, examples, transform=None, centroid_radius=2,
@@ -47,21 +47,25 @@ class DetectionDataset(Dataset):
         labels_rel = data.Stack.Label & [{'example_id': id_} for id_ in examples]
         labels = labels_rel.fetch('label', order_by='example_id')
         if binarize_labels:
-            labels = [np.clip(lbl, a_min=0, a_max=1) for lbl in labels]
-        self.labels = [lbl.astype(np.int32) for lbl in labels]
+            labels = [np.clip(lbl, a_min=0, a_max=1).astype(np.uint8) for lbl in labels]
+        else:
+            labels = [lbl.astype(np.int32) for lbl in labels]
+        self.labels = labels
 
         # Get centroids
-        self.centroids = []
+        centroids = []
         for example_id, volume in zip(examples, self.volumes):
             zs, ys, xs = (data.Stack.MaskProperties & {'example_id': example_id}).fetch(
                 'z_centroid', 'y_centroid', 'x_centroid')
             zs, ys, xs = (np.round(zs).astype(int), np.round(ys).astype(int),
                           np.round(xs).astype(int))
-            centroids = np.zeros(volume.shape[1:], dtype=np.bool)
-            centroids[zs, ys, xs] = True  # initial centroids
+            one_centroids = np.zeros(volume.shape[1:], dtype=np.bool)
+            one_centroids[zs, ys, xs] = True  # initial centroids
             if centroid_radius > 0:
-                centroids = ndimage.binary_dilation(centroids, iterations=centroid_radius)
-            self.centroids.append(centroids.astype(np.int32))  # pytorch does not have bool
+                one_centroids = ndimage.binary_dilation(one_centroids,
+                                                        iterations=centroid_radius)
+            centroids.append(one_centroids)
+        self.centroids = [centroid.astype(np.uint8) for centroid in centroids]
 
         # Store transform
         self.transform = transform

@@ -299,6 +299,6 @@ def _compute_loss(pred, label, pos_weight):
         label (torch.tensor): Label (depth x height x width).
         pos_weight (float): Weight to give to the positive examples.
     """
-    loss = F.binary_cross_entropy_with_logits(pred, label, pos_weight=pos_weight)
+    loss = F.binary_cross_entropy_with_logits(pred, label.float(), pos_weight=pos_weight)
     loss = 2 * loss / (pos_weight + 1) # this keeps loss range at stable ranges
     return loss
