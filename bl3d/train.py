@@ -142,11 +142,13 @@ class QCANet(dj.Computed):
                 detection, segmentation = net(volume)
 
                 # Backprop on detection loss
-                ndn_loss = _compute_loss(detection, centroids, train_params['ndn_pos_weight'])
+                ndn_loss = _compute_loss(detection[:, 0], centroids,
+                                         train_params['ndn_pos_weight'])
                 ndn_loss.backward()
 
                 # Backprop on segmentation loss
-                nsn_loss = _compute_loss(segmentation, label, train_params['nsn_pos_weight'])
+                nsn_loss = _compute_loss(segmentation[:, 0], label,
+                                         train_params['nsn_pos_weight'])
                 nsn_loss.backward()
 
                 # Check for divergence
@@ -189,9 +191,9 @@ class QCANet(dj.Computed):
                     for volume, label, centroids in val_dloader:
                         detection, segmentation = net(volume.cuda())
 
-                        total_ndn_loss += _compute_loss(detection, centroids.cuda(),
+                        total_ndn_loss += _compute_loss(detection[:, 0], centroids.cuda(),
                                                         train_params['ndn_pos_weight']).item()
-                        total_nsn_loss += _compute_loss(segmentation, label.cuda(),
+                        total_nsn_loss += _compute_loss(segmentation[:, 0], label.cuda(),
                                                         train_params['nsn_pos_weight']).item()
                         total_ndn_iou += _compute_iou(detection[0, 0], centroids.cuda(),
                                                       train_params['ndn_threshold']).item()
