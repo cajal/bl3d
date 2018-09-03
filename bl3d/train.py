@@ -141,22 +141,20 @@ class QCANet(dj.Computed):
                 # Forward
                 detection, segmentation = net(volume)
 
-                # Backprop on detection loss
+                # Compute loss
                 ndn_loss = _compute_loss(detection[:, 0], centroids,
                                          train_params['ndn_pos_weight'])
-                ndn_loss.backward()
-
-                # Backprop on segmentation loss
                 nsn_loss = _compute_loss(segmentation[:, 0], label,
                                          train_params['nsn_pos_weight'])
-                nsn_loss.backward()
+                loss = ndn_loss + train_params['nsn_loss_weight'] * nsn_loss
 
                 # Check for divergence
                 if (torch.isnan(ndn_loss) or torch.isinf(ndn_loss) or
                     torch.isnan(nsn_loss) or torch.isinf(nsn_loss)):
                     raise ValueError('Loss diverged')
 
-                # Update params
+                # Backprop
+                loss.backward()
                 optimizer.step()
 
                 # Compute IOUs
@@ -217,7 +215,8 @@ class QCANet(dj.Computed):
                                           val_nsn_iou))
 
                 # Reduce learning rate
-                scheduler.step(val_ndn_loss + val_nsn_loss)
+                scheduler.step(val_ndn_loss + train_params['nsn_loss_weight'] *
+                               val_nsn_loss)
 
                 # Save best model
                 if val_ndn_iou > bestndn_ious['ndn']:
