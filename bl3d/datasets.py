@@ -61,7 +61,7 @@ class DetectionDataset(Dataset):
             centroids[zs, ys, xs] = True  # initial centroids
             if centroid_radius > 0:
                 centroids = ndimage.binary_dilation(centroids, iterations=centroid_radius)
-            self.centroids.append(centroids.astype(np.uint8))  # pytorch does not have bool
+            self.centroids.append(centroids.astype(np.int32))  # pytorch does not have bool
 
         # Store transform
         self.transform = transform
