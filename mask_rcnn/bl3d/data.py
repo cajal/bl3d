@@ -10,18 +10,17 @@ from . import utils
 
 dj.config['external-bl3d'] = {'protocol': 'file', 'location': '/mnt/lab/users/ecobost'}
 dj.config['cache'] = '/tmp/dj-cache'
-schema = dj.schema('ecobost_bl3d3', locals())
+schema = dj.schema('ecobost_bl3d2', locals())
 
 
 def get_stack(key, channel=1):
     """ Fetch a stack from the stack pipeline.
 
     Arguments:
-        key (dict): Key used to constrain stack.CorrectedStack()
-        channel (int): What channel to fetch. Starts at 1
-
+        key: key used to constrain stack.CorrectedStack()
+        channel: What channel to fetch. Starts at 1
     Returns:
-        A depth x height x width np.array. The stack.
+        A 3-d np.array (depth x height x width). The stack.
     """
     slice_rel = (stack.CorrectedStack.Slice() & key & {'channel': channel})
     slices = slice_rel.fetch('slice', order_by='islice')

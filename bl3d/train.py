@@ -1,12 +1,15 @@
-""" Importing structural data from our pipeline. """
 import datajoint as dj
 import numpy as np
 import copy
+import random
+import time
+
 import torch
 from torch import optim
 from torch.optim import lr_scheduler
 from torch.utils import data
 from torchvision.transforms import Compose
+from torch.nn import functional as F
 
 from . import params
 from . import datasets
@@ -14,81 +17,85 @@ from . import transforms
 from . import models
 
 
-
 def log(*messages):
     """ Simple logging function."""
-    import time
     formatted_time = "[{}]".format(time.ctime())
     print(formatted_time, *messages, flush=True)
 
 
-def mysql_float(number):
-    """ Clean a float to be inserted in MySQL."""
-    return -1 if np.isnan(number) else 1e10 if np.isinf(number) else number
-
-
-
-schema = dj.schema('ecobost_bl3d2', locals())
+schema = dj.schema('ecobost_bl3d3', locals())
+dj.config['external-bl3d'] = {'protocol': 'file', 'location': '/mnt/lab/users/ecobost'}
 
 
 @schema
-class TrainedModel(dj.Computed):
+class QCANet(dj.Computed):
     definition = """ # trained model and logs
 
-    -> params.TrainingParams               # hyperparameters used for training
-    -> params.ModelParams                  # architectural details of the model to train
-    -> params.TrainingSplit                # dataset split used for training
+    -> params.ModelParams                   # architectural details of the model to train
+    -> params.TrainingParams                # hyperparameters used for training
+    -> params.TrainingSplit                 # dataset split used for training
     ---
-    train_loss:             longblob        # training loss per example
-    val_loss:               longblob        # validation loss per epoch
-    diverged:               boolean         # whether the loss diverged during training (went to nan or inf)
-    best_model:             longblob        # dictionary with trained weights
-    best_epoch:             int             # epoch at which best_val_loss was achieved
-    best_val_loss:          float           # best validation loss achieved
-    best_train_loss:        float           # training loss averaged over all examples in best_epoch
-    final_model:            longblob        # model in the final epoch
-    final_val_loss:         float           # final loss in the validation set
-    final_train_loss:       float           # training loss averaged over all examples in final_epoch
-    training_ts=CURRENT_TIMESTAMP:  timestamp
+    train_ndn_loss:         longblob        # training loss of the ndn per batch 
+    train_nsn_loss:         longblob        # training loss of the nsn per batch
+    train_ndn_iou:          longblob        # iou of the ndn per training batch
+    train_nsn_iou:          longblob        # iou of the nsn per training batch
+    val_ndn_loss:           longblob        # validation loss of the ndn per epoch
+    val_nsn_loss:           longblob        # validation loss of the nsn per epoch
+    val_ndn_iou:            longblob        # iou of the ndn in the validation set
+    val_nsn_iou:            longblob        # iou of the nsn in the validation set
+    lr_history:             longblob        # learning rate per epoch
+    bestndn_model:          external-bl3d   # dictionary with trained weights for the best ndn
+    bestndn_ndn_iou:        float           # ndn iou when the ndn had the best validation iou
+    bestndn_nsn_iou:        float           # nsn iou when the ndn had the best validation iou
+    bestndn_loss:           float           # combined loss for the bestndn
+    bestndn_epoch:          int             # epoch when the best ndn was found
+    bestnsn_model:          external-bl3d   # dictionary with trained weights for the best nsn
+    bestnsn_ndn_iou:        float           # ndn iou when the nsn had the best validation iou
+    bestnsn_nsn_iou:        float           # nsn iou when the nsn had the best validation iou
+    bestnsn_loss:           float           # combined loss for the bestnsn
+    bestnsn_epoch:          int             # epoch when the best nsn was found
+    training_time:          int             # how many minutes it took to train this network
+    training_ts=CURRENT_TIMESTAMP:  timestamp   
     """
     def make(self, key):
-        """ Trains a Mask R-CNN model using SGD with Nesterov's Accelerated Gradient."""
         log('Training model', key['model_version'], 'with hyperparams',
             key['training_id'], 'using animal', key['val_animal'], 'for validation.')
         train_params = (params.TrainingParams & key).fetch1()
 
         # Set random seeds
         torch.manual_seed(train_params['seed'])
+        torch.cuda.manual_seed(train_params['seed'])
         np.random.seed(train_params['seed'])
+        random.seed(train_params['seed'])
 
         # Get datasets
         log('Creating datasets')
+        dset_kwargs = {'normalize_volume': train_params['normalize_volume'],
+                       'centroid_radius': train_params['centroid_radius']}
+
         train_examples = (params.TrainingSplit & key).fetch1('train_examples')
         train_transform = Compose([transforms.RandomCrop(train_params['train_crop_size']),
                                    transforms.RandomRotate(),
                                    transforms.RandomHorizontalFlip(),
                                    transforms.ContrastNorm(),
                                    transforms.MakeContiguous()])
-        dset_kwargs = {'enhance_volume': train_params['enhanced_input'],
-                       'anchor_size': tuple(train_params['anchor_size_' + d] for d in 'dhw')}
-        train_dset = datasets.DetectionDataset(train_examples, train_transform, **dset_kwargs)
-        train_dloader = data.DataLoader(train_dset, shuffle=True, num_workers=2, pin_memory=True)
+        train_dset = datasets.DetectionDataset(train_examples, train_transform,
+                                               **dset_kwargs)
+        train_dloader = data.DataLoader(train_dset, shuffle=True, num_workers=4,
+                                        pin_memory=True)
 
         val_examples = (params.TrainingSplit & key).fetch1('val_examples')
         val_transform = Compose([transforms.RandomCrop(train_params['val_crop_size']),
                                  transforms.ContrastNorm()])
         val_dset = datasets.DetectionDataset(val_examples, val_transform, **dset_kwargs)
-        val_dloader = data.DataLoader(val_dset, shuffle=True, num_workers=2, pin_memory=True)
+        val_dloader = data.DataLoader(val_dset, num_workers=4, pin_memory=True)
 
         # Get model
         log('Instantiating model')
-        net = models.MaskRCNN(anchor_size=dset_kwargs['anchor_size'],
-                              roi_size=tuple(train_params['roi_size_' + d] for d in 'dhw'),
-                              nms_iou=train_params['nms_iou'],
-                              num_proposals=train_params['train_num_proposals'])
-        if ((net.core.version, net.rpn.version, net.bbox.version, net.fcn.version) !=
-            (params.ModelParams & key).fetch1('core_version', 'rpn_version',
-                                              'bbox_version', 'fcn_version')):
+        net = models.QCANet()
+        net_version = (params.ModelParams & key).fetch1('core_version', 'ndn_version',
+                                                        'nsn_version')
+        if (net.core.version, net.ndn.version, net.nsn.version) != net_version:
             raise ValueError('Code and documented version do not match!')
         net.init_parameters()
         net.cuda()
@@ -98,287 +105,198 @@ class TrainedModel(dj.Computed):
         optimizer = optim.SGD(net.parameters(), lr=train_params['learning_rate'],
                               momentum=train_params['momentum'], nesterov=True,
                               weight_decay=train_params['weight_decay'])
-        scheduler = lr_scheduler.MultiStepLR(optimizer, gamma=train_params['lr_decay'],
-                                             milestones=train_params['lr_schedule'])
-        scheduler.step() # scheduler starts epochs at zero, we start them at 1
+        scheduler = lr_scheduler.ReduceLROnPlateau(optimizer,
+                                                   factor=train_params['lr_decay'],
+                                                   patience=int(round(
+                                                       train_params['decay_epochs'] /
+                                                       train_params['val_epochs'])),
+                                                   verbose=True)
 
         # Initialize some logs
-        train_loss = []
-        val_loss = []
-        best_model = copy.deepcopy(net)
-        best_val_loss = 1e10 # float('inf')
-        best_epoch = 0
+        losses = {k: [] for k in ('ndn_train', 'nsn_train', 'ndn_val', 'nsn_val')}
+        ious = {k: [] for k in ('ndn_train', 'nsn_train', 'ndn_val', 'nsn_val')}
+        bestndn_ious = {k: 0 for k in ('ndn', 'nsn')}
+        bestnsn_ious = {k: 0 for k in ('ndn', 'nsn')}
+        best_epochs = {k: 0 for k in ('bestndn', 'bestnsn')}
+        best_losses = {k: 0 for k in ('bestndn', 'bestnsn')}
+        best_nets = {k: copy.deepcopy(net).cpu() for k in ('bestndn', 'bestnsn')}
+        lr_history = []
+        start_time = time.time()  # in seconds
+
+        # Initialize some logs
         for epoch in range(1, train_params['num_epochs'] + 1):
             log('Epoch {}:'.format(epoch))
 
+            # Record learning rate
+            lr_history.append(optimizer.param_groups[0]['lr'])
+
             # Loop over training set
-            for volume, label, cell_bboxes, anchor_bboxes in train_dloader:
+            for volume, label, centroids in train_dloader:
                 # Zero the gradients
                 net.zero_grad()
 
+                # Move variables to GPU
+                volume, label, centroids = volume.cuda(), label.cuda(), centroids.cuda()
+
                 # Forward
-                scores, proposals, top_proposals, probs, bboxes, masks = net(volume.cuda())
-                if len(top_proposals) < net.num_proposals:
-                    print('Warning: Only', len(top_proposals), 'nonoverlapping proposals'
-                          ' were generated.')
+                detection, segmentation = net(volume)
 
-                # Create labels for the top proposals (passed through the bbox and mask branch)
-                roi_bboxes, roi_masks = create_branch_labels(top_proposals, net.roi_size,
-                                                             label[0].numpy(),
-                                                             cell_bboxes[0].numpy().T)
-                roi_bboxes = torch.cuda.FloatTensor(roi_bboxes)
-                roi_masks = torch.cuda.ByteTensor(roi_masks.astype(np.uint8))
+                # Backprop on detection loss
+                ndn_loss = _compute_loss(detection, centroids, train_params['ndn_pos_weight'])
+                ndn_loss.backward()
 
-                # Compute loss
-                anchor_bboxes = anchor_bboxes.cuda()
-                loss = compute_loss(scores, ~torch.isnan(anchor_bboxes[:, 0]), proposals,
-                                    anchor_bboxes, probs, ~torch.isnan(roi_bboxes[:, 0]),
-                                    bboxes, roi_bboxes, masks, roi_masks,
-                                    rpn_pos_weight=train_params['positive_weight'],
-                                    smoothl1_weight=train_params['smoothl1_weight'])
-
-                # Record training loss
-                log('Training loss:', loss.item())
-                train_loss.append(loss.item())
+                # Backprop on segmentation loss
+                nsn_loss = _compute_loss(segmentation, label, train_params['nsn_pos_weight'])
+                nsn_loss.backward()
 
                 # Check for divergence
-                if torch.isnan(loss) or torch.isinf(loss):
-                    log('Error: Loss diverged!')
-                    del (volume, label, cell_bboxes, anchor_bboxes, scores, proposals,
-                         top_proposals, probs, bboxes, masks, roi_bboxes, roi_masks,
-                         loss) # free space
+                if (torch.isnan(ndn_loss) or torch.isinf(ndn_loss) or
+                    torch.isnan(nsn_loss) or torch.isinf(nsn_loss)):
+                    raise ValueError('Loss diverged')
 
-                    log('Inserting results')
-                    results = key.copy()
-                    results['train_loss'] = train_loss
-                    results['val_loss'] = val_loss
-                    results['diverged'] = True # !!
-                    results['best_model'] = {k: v.cpu().numpy() for k, v in best_model.state_dict().items()}
-                    results['best_epoch'] = best_epoch
-                    results['best_val_loss'] = best_val_loss
-                    best_train_loss = compute_loss_on_batch(best_model, train_dloader,
-                                                            train_params['positive_weight'],
-                                                            train_params['smoothl1_weight'])
-                    results['best_train_loss'] = mysql_float(best_train_loss)
-                    results['final_model'] = {k: v.cpu().numpy() for k, v in net.state_dict().items()}
-                    net.num_proposals = train_params['val_num_proposals']
-                    final_val_loss = compute_loss_on_batch(net, val_dloader,
-                                                           train_params['positive_weight'],
-                                                           train_params['smoothl1_weight'])
-                    net.num_proposals = train_params['train_num_proposals']
-                    results['final_val_loss'] = mysql_float(final_val_loss)
-                    final_train_loss = compute_loss_on_batch(net, train_dloader,
-                                                             train_params['positive_weight'],
-                                                             train_params['smoothl1_weight'])
-                    results['final_train_loss'] = mysql_float(final_train_loss)
-                    self.insert1(results)
-                    return -1
-
-                # Backprop
-                loss.backward()
+                # Update params
                 optimizer.step()
 
+                # Compute IOUs
+                with torch.no_grad():
+                    ndn_iou = _compute_iou(detection[0, 0], centroids,
+                                           train_params['ndn_threshold'])
+                    nsn_iou = _compute_iou(segmentation[0, 0], label,
+                                           train_params['nsn_threshold'])
+
+                # Record training losses
+                losses['ndn_train'] = ndn_loss.item()
+                losses['nsn_train'] = nsn_loss.item()
+                ious['ndn_train'] = ndn_iou.item()
+                ious['nsn_train'] = nsn_iou.item()
+                log(('Training loss (iou) for ndn /nsn: {:.5f} ({:04.2f}) / {:.5f} '
+                     '({:04.2f})').format(ndn_loss.item(), ndn_iou.item(),
+                                          nsn_loss.item(), nsn_iou.item()))
+
                 # Delete variables to free memory (only minimal gain)
-                del (volume, label, cell_bboxes, anchor_bboxes, scores, proposals,
-                     top_proposals, probs, bboxes, masks, roi_bboxes, roi_masks, loss)
+                del volume, label, centroids, detection, segmentation, ndn_loss, nsn_loss
 
-            # Record validation loss
-            net.num_proposals = train_params['val_num_proposals']
-            epoch_val_loss = compute_loss_on_batch(net, val_dloader,
-                                                   train_params['positive_weight'],
-                                                   train_params['smoothl1_weight'])
-            net.num_proposals = train_params['train_num_proposals']
-            log('Validation loss:', epoch_val_loss)
-            val_loss.append(epoch_val_loss)
+            # Compute validation metrics and save best models
+            if epoch % train_params['val_epochs'] == 0:
 
-            # Reduce learning rate
-            scheduler.step()
+                # Compute loss and iou on the validation set
+                total_ndn_loss = 0
+                total_nsn_loss = 0
+                total_ndn_iou = 0
+                total_nsn_iou = 0
+                with torch.no_grad():
+                    net.eval()
+                    for volume, label, centroids in val_dloader:
+                        detection, segmentation = net(volume.cuda())
 
-            # Save best model
-            if epoch_val_loss < best_val_loss:
-                log('Saving best model...')
-                best_val_loss = epoch_val_loss
-                best_model = copy.deepcopy(net)
-                best_epoch = epoch
+                        total_ndn_loss += _compute_loss(detection, centroids.cuda(),
+                                                        train_params['ndn_pos_weight']).item()
+                        total_nsn_loss += _compute_loss(segmentation, label.cuda(),
+                                                        train_params['nsn_pos_weight']).item()
+                        total_ndn_iou += _compute_iou(detection[0, 0], centroids.cuda(),
+                                                      train_params['ndn_threshold']).item()
+                        total_nsn_iou += _compute_iou(segmentation[0, 0], label.cuda(),
+                                                      train_params['nsn_threshold']).item()
+
+                        del volume, label, centroids, detection, segmentation
+                    net.train()
+                val_ndn_loss = total_ndn_loss / len(val_dloader)
+                val_nsn_loss = total_nsn_loss / len(val_dloader)
+                val_ndn_iou = total_ndn_iou / len(val_dloader)
+                val_nsn_iou = total_nsn_iou / len(val_dloader)
+
+                # Record validation loss
+                losses['ndn_val'] = val_ndn_loss
+                losses['nsn_val'] = val_nsn_loss
+                ious['ndn_val'] = val_ndn_iou
+                ious['nsn_val'] = val_nsn_iou
+                log(('Validation loss (iou) for ndn /nsn: {:.5f} ({:04.2f}) / {:.5f} '
+                     '({:04.2f})').format(val_ndn_loss, val_ndn_iou, val_nsn_loss,
+                                          val_nsn_iou))
+
+                # Reduce learning rate
+                scheduler.step(val_ndn_loss + val_nsn_loss)
+
+                # Save best model
+                if val_ndn_iou > bestndn_ious['ndn']:
+                    bestndn_ious['ndn'] = val_ndn_iou
+                    bestndn_ious['nsn'] = val_nsn_iou
+                    best_losses['bestndn'] = val_ndn_loss + val_nsn_loss
+                    best_epochs['bestndn'] = epoch
+                    best_nets['bestndn'] = copy.deepcopy(net).cpu()
+                if val_nsn_iou > bestnsn_ious['nsn']:
+                    bestnsn_ious['ndn'] = val_ndn_iou
+                    bestnsn_ious['nsn'] = val_nsn_iou
+                    best_losses['bestnsn'] = val_ndn_loss + val_nsn_loss
+                    best_epochs['bestnsn'] = epoch
+                    best_nets['bestnsn'] = copy.deepcopy(net).cpu()
 
         # Insert results
-        log('Inserting results')
         results = key.copy()
-        results['train_loss'] = train_loss
-        results['val_loss'] = val_loss
-        results['diverged'] = False
-        results['best_model'] = {k: v.cpu().numpy() for k, v in best_model.state_dict().items()}
-        results['best_epoch'] = best_epoch
-        results['best_val_loss'] = best_val_loss
-        results['best_train_loss'] = compute_loss_on_batch(best_model, train_dloader,
-                                                           train_params['positive_weight'],
-                                                           train_params['smoothl1_weight'])
-        results['final_model'] = {k: v.cpu().numpy() for k, v in net.state_dict().items()}
-        results['final_val_loss'] = epoch_val_loss
-        results['final_train_loss'] = compute_loss_on_batch(net, train_dloader,
-                                                            train_params['positive_weight'],
-                                                            train_params['smoothl1_weight'])
+        results['train_ndn_loss'] = np.array(losses['train_ndn'], dtype=np.float32)
+        results['train_nsn_loss'] = np.array(losses['train_nsn'], dtype=np.float32)
+        results['train_ndn_iou'] = np.array(ious['train_ndn'], dtype=np.float32)
+        results['train_nsn_iou'] = np.array(ious['train_nsn'], dtype=np.float32)
+        results['val_ndn_loss'] = np.array(losses['val_ndn'], dtype=np.float32)
+        results['val_nsn_loss'] = np.array(losses['val_nsn'], dtype=np.float32)
+        results['val_ndn_iou'] = np.array(ious['val_ndn'], dtype=np.float32)
+        results['val_nsn_iou'] = np.array(ious['val_nsn'], dtype=np.float32)
+        results['lr_history'] = np.array(lr_history, dtype=np.float32)
+        results['bestndn_model'] = {k: v.cpu().numpy() for k, v in
+                                    best_nets['bestndn'].state_dict().items()}
+        results['bestndn_ndn_iou'] = bestndn_ious['ndn']
+        results['bestndn_nsn_iou'] = bestndn_ious['nsn']
+        results['bestndn_loss'] = best_losses['bestndn']
+        results['bestndn_epoch'] = best_epochs['bestndn']
+        results['bestnsn_model'] = {k: v.cpu().numpy() for k, v in
+                                    best_nets['bestnsn'].state_dict().items()}
+        results['bestnsn_ndn_iou'] = bestnsn_ious['ndn']
+        results['bestnsn_nsn_iou'] = bestnsn_ious['nsn']
+        results['bestnsn_loss'] = best_losses['bestnsn']
+        results['bestnsn_epoch'] = best_epochs['bestnsn']
+        results['training_time'] = round((time.time() - start_time) / 60)
         self.insert1(results)
 
-    def load_model(key, best_or_final='best'):
+    def load_model(key, bestndn_or_bestnsn='bestnsn'):
         # Declare network
-        train_params = (params.TrainingParams & key).fetch1()
-        net = models.MaskRCNN(anchor_size=tuple(train_params['anchor_size_' + d] for d in 'dhw'),
-                              roi_size=tuple(train_params['roi_size_' + d] for d in 'dhw'),
-                              nms_iou=train_params['nms_iou'],
-                              num_proposals=train_params['train_num_proposals'])
-        if ((net.core.version, net.rpn.version, net.bbox.version, net.fcn.version) !=
-            (params.ModelParams & key).fetch1('core_version', 'rpn_version',
-                                              'bbox_version', 'fcn_version')):
+        net = models.QCANet()
+        net_version = (params.ModelParams & key).fetch1('core_version', 'ndn_version',
+                                                        'nsn_version')
+        if (net.core.version, net.ndn.version, net.nsn.version) != net_version:
             raise ValueError('Code and documented version do not match!')
 
         # Load state dict from database
-        recarray = (TrainedModel & key).fetch1('{}_model'.format(best_or_final))
-        state_dict = {k: torch.as_tensor(np.array(recarray[k][0])) for k in recarray.dtype.names}
+        recarray = (QCANet & key).fetch1('{}_model'.format(bestndn_or_bestnsn))
+        state_dict = {k: torch.as_tensor(np.array(recarray[k][0])) for k in
+                      recarray.dtype.names}
         net.load_state_dict(state_dict)
 
         return net
 
 
-def create_branch_labels(bboxes, roi_size, label, gt_bboxes, iou_thresh=0.5):
-    """ Create training labels for a set of bboxes.
+def _compute_iou(pred, label, percentile_thresh):
+    """ Compute iou given a prediction and label.
 
     Arguments:
-        bboxes: An array (N x 6). Bboxes for which labels will be created. Absolute bbox
-            coordinates (z, y, x, d, h, w).
-        roi_size: An int or triplet. Size of the roi to sample.
-        label: An array (D x H x W) with the id of the object labelled at each voxel.
-            Zero if no object is found in that voxel.
-        gt_bboxes: An array (NOBJECTS x 6). Ground truth bboxes in absolute coords.
-        iou_thresh: Float. Threshold to determine whether a bbox will be considered a
-            positive object.
-
-    Returns:
-        par_bboxes: Parametrized bboxes (N x 6). Coordinates of the highest overlapping
-            ground truth object parametrized (as in Ren et al., 2017) using the bbox as
-            anchor. NaN for bboxes that do not overlap (IOU < iou_thresh) with any ground
-            truth object.
-        masks: A boolean array (N x R1 x R2 x R3) with the masks per bbox. All False for
-            bboxes with no assigned object.
+        pred (torch.tensor): Prediction.
+        label (torch.tensor): Label. Same shape as the prediction.
+        percentile_thresh (float): Percentile of values in pred that will be considered
+            positive (0-100).
     """
-    roi_size = roi_size if isinstance(roi_size, tuple) else (roi_size, ) * 3
-    roi_size = np.array(roi_size)
-
-    # Create parametrized bboxes and mask for each bbox
-    par_bboxes = np.full_like(bboxes, np.nan)
-    masks = np.zeros((len(bboxes), *roi_size), dtype=bool)
-    ious = models.compute_ious(bboxes, gt_bboxes) # N x NOBJECTS
-    best_gt_ids = np.argmax(ious, axis=-1) + 1 # object_ids in label start at 1
-    for i, (bbox, best_gt_id) in enumerate(zip(bboxes, best_gt_ids)):
-        if ious[i, best_gt_id - 1] >= iou_thresh:
-            best_gt_bbox = gt_bboxes[best_gt_id - 1]
-
-            par_bboxes[i, :3] = (best_gt_bbox[:3] - bbox[:3]) / bbox[3:]
-            par_bboxes[i, 3:] = np.log(best_gt_bbox[3:] / bbox[3:])
-
-            coords = [np.linspace(x - d/2 + d/(2 * rs), x + d/2 - d/(2 * rs), rs) for
-                      x, d, rs in zip(bbox[:3], bbox[3:], roi_size)] # roi coordinates
-            indices = [np.round(c - 0.5 + 1e-7).astype(int) for c in coords] # nearest neighbor indices
-            valid = [np.logical_and(idx >= 0, idx < max_idx) for idx, max_idx in
-                     zip(indices, label.shape)]
-            valid_label = label[np.ix_(*[idx[val] for idx, val in zip(indices, valid)])]
-            masks[i][np.ix_(*valid)] = (valid_label == best_gt_id)
-
-    return par_bboxes, masks
+    binary_pred = pred > np.percentile(pred.detach().cpu().numpy(), percentile_thresh)
+    iou = (binary_pred & label).sum() / (binary_pred | label).sum()
+    return iou
 
 
-def compute_loss(scores, scores_lbl, proposals, proposals_lbl, probs, probs_lbl, bboxes,
-                 bboxes_lbl, masks, masks_lbl, rpn_pos_weight, smoothl1_weight):
-    """ Compute Mask-RCNN (end-to-end) loss: L = L_{rpn} + L_{bbox} + L_{mask}.
-
-    L_{rpn} and L_{bbox} (Ren et al. 2017; Eq. 3) are each the sum of the logistic loss
-    on the scores and a smoothL1 loss (Girshick, 2015; Eq. 3) on the bbox parameters.
-    L_{mask} is the average logistic loss across voxels.
-
-    RCN and Mask-RCN sample proposals 1:3 and 1:1 (positive:negative), respectively, to
-    compute the RPN loss function. Rather than discarding a lot of those proposals, we
-    use a weighted loss function with rpn_pos_weight:1 weights.
+def _compute_loss(pred, label, pos_weight):
+    """ Compute a (weighted) logistic loss on the input.
 
     Arguments:
-        scores: A N x D x H x W tensor. Logits (unnormalized log probs) per voxel.
-        proposals: A N x 6 x D x H x W tensor. Parametrized bbox coordinates per voxel.
-        probs: A NROIS tensor. Logits (unnormalized log probabilities) per ROI.
-        bboxes: A NROIS x 6 tensor. Parametrized bbox coordinates per ROI.
-        masks: A NROIS x R1 x R2 x R3 tensor. Logits (unnormalized log probabilities) per
-            voxel.
-        *_lbl: Tensors with the same shape as the predicted version. Labels.
-        rpn_pos_weight: A float. Weight given to the predictions on positive RPN scores.
-        smoothl1_weight: A float. Weight for the smooth L1 loss component in L_{rpn} and
-            L_{bbox}.
-
-    Returns:
-        A scalar tensor/float. The total loss.
-
-    Note:
-        This is a differentiable function. All tensors must be in the same device.
+        pred (torch.tensor): Prediction. Logits (num_examples x num_channels x depth x
+            height x width).
+        label (torch.tensor): Label (depth x height x width).
+        pos_weight (float): Weight to give to the positive examples.
     """
-    from torch.nn import functional as F
-
-    # Compute RPN loss
-    rpn_class_loss = F.binary_cross_entropy_with_logits(scores, scores_lbl.float(),
-                                                        pos_weight=rpn_pos_weight)
-    if scores_lbl.any():
-        rpn_bbox_loss = F.smooth_l1_loss(proposals.transpose(0, 1)[:, scores_lbl],
-                                         proposals_lbl.transpose(0, 1)[:, scores_lbl])
-    else:
-        rpn_bbox_loss = 0
-    rpn_loss = rpn_class_loss + smoothl1_weight * rpn_bbox_loss
-
-    # Compute bbox loss
-    bbox_class_loss = F.binary_cross_entropy_with_logits(probs, probs_lbl.float())
-    if probs_lbl.any():
-        bbox_bbox_loss = F.smooth_l1_loss(bboxes[probs_lbl], bboxes_lbl[probs_lbl])
-    else:
-        bbox_bbox_loss = 0
-    bbox_loss = bbox_class_loss + smoothl1_weight * bbox_bbox_loss
-
-    # Compute fcn loss
-    if probs_lbl.any():
-        fcn_loss = F.binary_cross_entropy_with_logits(masks[probs_lbl],
-                                                      masks_lbl[probs_lbl].float())
-    else:
-        fcn_loss = 0
-
-    # Combine
-    loss = rpn_loss + bbox_loss + fcn_loss
-
-    return loss
-
-
-def compute_loss_on_batch(net, dataloader, rpn_pos_weight, smoothl1_weight):
-    """ Compute average loss over examples in a dataloader. """
-    training_mode = net.training
-    net.eval()
-
-    total_loss = 0
-    with torch.no_grad():
-        for volume, label, cell_bboxes, anchor_bboxes in dataloader:
-            # Forward
-            scores, proposals, top_proposals, probs, bboxes, masks = net(volume.cuda())
-
-            # Create labels for the top proposals (passed through bbox and mask branch)
-            roi_bboxes, roi_masks = create_branch_labels(top_proposals, net.roi_size,
-                                                         label[0].numpy(),
-                                                         cell_bboxes[0].numpy().T)
-            roi_bboxes = torch.cuda.FloatTensor(roi_bboxes)
-            roi_masks = torch.cuda.ByteTensor(roi_masks.astype(np.uint8))
-
-            # Compute loss
-            anchor_bboxes = anchor_bboxes.cuda()
-            loss = compute_loss(scores, ~torch.isnan(anchor_bboxes[:, 0]), proposals,
-                                anchor_bboxes, probs, ~torch.isnan(roi_bboxes[:, 0]),
-                                bboxes, roi_bboxes, masks, roi_masks,
-                                rpn_pos_weight=rpn_pos_weight,
-                                smoothl1_weight=smoothl1_weight)
-            total_loss += loss.item()
-    loss = total_loss / len(dataloader)
-
-    if training_mode:
-        net.train()
-
+    loss = F.binary_cross_entropy_with_logits(pred, label, pos_weight=pos_weight)
+    loss = 2 * loss / (pos_weight + 1) # this keeps loss range at stable ranges
     return loss

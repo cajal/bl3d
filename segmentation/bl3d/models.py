@@ -87,5 +87,3 @@ class FullyConvNet(nn.Module):
 
     def init_parameters(self):
         init_conv([module for module in self.fcn if isinstance(module, nn.Conv3d)])
-
-#TODO: Mask R-CNN (https://arxiv.org/abs/1703.06870)

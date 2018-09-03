@@ -115,7 +115,8 @@ def combine_masks(shape, masks, bboxes, use_ids=True):
     Arguments:
         shape: A tuple. Shape of the full volume.
         masks: A list of arrays. The masks to combine.
-        bboxes: NMASKS x 2*DIM array. The bbox coordinates of each mask (z, y, x, ..., d, h, w, ...).
+        bboxes: NMASKS x 2*DIM array. The bbox coordinates of each mask (z, y, x, ...,
+            d, h, w, ...).
         use_ids: Boolean. Set voxels where mask is positive to the index of the mask.
 
     Returns:
