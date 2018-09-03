@@ -133,8 +133,8 @@ class FCN(nn.Module):
         super().__init__()
 
         layers = []
-        for ic, oc, ks, d, p in zip([in_channels, *num_features[:-1]], num_features,
-                                    kernel_sizes, dilation, padding):
+        for ic, oc, ks, d, p in zip([in_channels, *num_features[:-2]], num_features[:-1],
+                                    kernel_sizes[:-1], dilation[:-1], padding[:-1]):
             layers.append(nn.Conv3d(ic, oc, ks, dilation=d, padding=p))
             layers.append(nn.ReLU(inplace=True))
             layers.append(nn.BatchNorm3d(oc))
