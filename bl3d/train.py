@@ -224,12 +224,14 @@ class QCANet(dj.Computed):
 
                 # Save best model
                 if val_ndn_iou > bestndn_ious['ndn']:
+                    log('Saving bestndn model...')
                     bestndn_ious['ndn'] = val_ndn_iou
                     bestndn_ious['nsn'] = val_nsn_iou
                     best_losses['bestndn'] = val_ndn_loss + val_nsn_loss
                     best_epochs['bestndn'] = epoch
                     best_nets['bestndn'] = copy.deepcopy(net).cpu()
                 if val_nsn_iou > bestnsn_ious['nsn']:
+                    log('Saving bestnsn model')
                     bestnsn_ious['ndn'] = val_ndn_iou
                     bestnsn_ious['nsn'] = val_nsn_iou
                     best_losses['bestnsn'] = val_ndn_loss + val_nsn_loss
