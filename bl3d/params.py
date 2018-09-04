@@ -37,7 +37,7 @@ class TrainingParams(dj.Lookup):
         for learning_rate, weight_decay, nsn_loss_weight, ndn_pos_weight, nsn_pos_weight \
             in itertools.product([0.01, 0.1, 1], [0, 0.0001], [0.1, 1, 10], [300], [10]):
             yield {'training_id': id_, 'seed': 1234, 'normalize_volume': True,
-                   'centroid_radius': 2, 'train_crop_size': 128, 'val_crop_size': 256,
+                   'centroid_radius': 2, 'train_crop_size': 128, 'val_crop_size': 192,
                    'learning_rate': learning_rate, 'momentum': 0.9,
                    'weight_decay': weight_decay, 'lr_decay': 0.1, 'num_epochs': 150,
                    'val_epochs': 1, 'decay_epochs': 10, 'ndn_pos_weight': ndn_pos_weight,
