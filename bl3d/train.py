@@ -169,9 +169,9 @@ class QCANet(dj.Computed):
                 losses['nsn_train'] = nsn_loss.item()
                 ious['ndn_train'] = ndn_iou.item()
                 ious['nsn_train'] = nsn_iou.item()
-                log(('Training loss (iou) for ndn /nsn: {:.5f} ({:04.2f}) / {:.5f} '
-                     '({:04.2f})').format(ndn_loss.item(), ndn_iou.item(),
-                                          nsn_loss.item(), nsn_iou.item()))
+                log(('Training loss (iou * 100) for ndn / nsn: {:.5f} ({:04.2f}) / {:.5f}'
+                     ' ({:04.2f})').format(ndn_loss.item(), ndn_iou.item() * 100,
+                                           nsn_loss.item(), nsn_iou.item() * 100))
 
                 # Delete variables to free memory (only minimal gain)
                 del volume, label, centroids, detection, segmentation, ndn_loss, nsn_loss
@@ -210,9 +210,9 @@ class QCANet(dj.Computed):
                 losses['nsn_val'] = val_nsn_loss
                 ious['ndn_val'] = val_ndn_iou
                 ious['nsn_val'] = val_nsn_iou
-                log(('Validation loss (iou) for ndn /nsn: {:.5f} ({:04.2f}) / {:.5f} '
-                     '({:04.2f})').format(val_ndn_loss, val_ndn_iou, val_nsn_loss,
-                                          val_nsn_iou))
+                log(('Validation loss (iou * 100) for ndn / nsn: {:.5f} ({:04.2f}) / '
+                     '{:.5f} ({:04.2f})').format(val_ndn_loss, val_ndn_iou * 100,
+                                                 val_nsn_loss, val_nsn_iou * 100))
 
                 # Reduce learning rate
                 scheduler.step(val_ndn_loss + train_params['nsn_loss_weight'] *
