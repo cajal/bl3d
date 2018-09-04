@@ -142,10 +142,12 @@ class QCANet(dj.Computed):
                 detection, segmentation = net(volume)
 
                 # Compute loss
-                ndn_loss = _compute_loss(detection[:, 0], centroids,
-                                         train_params['ndn_pos_weight'])
-                nsn_loss = _compute_loss(segmentation[:, 0], label,
-                                         train_params['nsn_pos_weight'])
+                ndn_loss = F.binary_cross_entropy_with_logits(detection[:, 0],
+                                                              centroids.float(),
+                                                              pos_weight=train_params['ndn_pos_weight'])
+                nsn_loss = F.binary_cross_entropy_with_logits(segmentation[:, 0],
+                                                              label.float(),
+                                                              pos_weight=train_params['nsn_pos_weight'])
                 loss = ndn_loss + train_params['nsn_loss_weight'] * nsn_loss
 
                 # Check for divergence
@@ -189,10 +191,12 @@ class QCANet(dj.Computed):
                     for volume, label, centroids in val_dloader:
                         detection, segmentation = net(volume.cuda())
 
-                        total_ndn_loss += _compute_loss(detection[:, 0], centroids.cuda(),
-                                                        train_params['ndn_pos_weight']).item()
-                        total_nsn_loss += _compute_loss(segmentation[:, 0], label.cuda(),
-                                                        train_params['nsn_pos_weight']).item()
+                        total_ndn_loss += F.binary_cross_entropy_with_logits(
+                            detection[:, 0], centroids.float().cuda(),
+                            pos_weight=train_params['ndn_pos_weight']).item()
+                        total_nsn_loss += F.binary_cross_entropy_with_logits(
+                            segmentation[:, 0], label.float().cuda(),
+                            pos_weight=train_params['nsn_pos_weight']).item()
                         total_ndn_iou += _compute_iou(detection[0, 0], centroids.cuda(),
                                                       train_params['ndn_threshold']).item()
                         total_nsn_iou += _compute_iou(segmentation[0, 0], label.cuda(),
@@ -285,19 +289,5 @@ def _compute_iou(pred, label, percentile_thresh):
             positive (0-100).
     """
     binary_pred = pred > np.percentile(pred.detach().cpu().numpy(), percentile_thresh)
-    iou = (binary_pred & label).sum() / (binary_pred | label).sum()
+    iou = (binary_pred & label).sum().float() / (binary_pred | label).sum().float()
     return iou
-
-
-def _compute_loss(pred, label, pos_weight):
-    """ Compute a (weighted) logistic loss on the input.
-
-    Arguments:
-        pred (torch.tensor): Prediction. Logits (num_examples x num_channels x depth x
-            height x width).
-        label (torch.tensor): Label (depth x height x width).
-        pos_weight (float): Weight to give to the positive examples.
-    """
-    loss = F.binary_cross_entropy_with_logits(pred, label.float(), pos_weight=pos_weight)
-    loss = 2 * loss / (pos_weight + 1) # this keeps loss range at stable ranges
-    return loss
