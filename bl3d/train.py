@@ -240,14 +240,14 @@ class QCANet(dj.Computed):
 
         # Insert results
         results = key.copy()
-        results['train_ndn_loss'] = np.array(losses['train_ndn'], dtype=np.float32)
-        results['train_nsn_loss'] = np.array(losses['train_nsn'], dtype=np.float32)
-        results['train_ndn_iou'] = np.array(ious['train_ndn'], dtype=np.float32)
-        results['train_nsn_iou'] = np.array(ious['train_nsn'], dtype=np.float32)
-        results['val_ndn_loss'] = np.array(losses['val_ndn'], dtype=np.float32)
-        results['val_nsn_loss'] = np.array(losses['val_nsn'], dtype=np.float32)
-        results['val_ndn_iou'] = np.array(ious['val_ndn'], dtype=np.float32)
-        results['val_nsn_iou'] = np.array(ious['val_nsn'], dtype=np.float32)
+        results['train_ndn_loss'] = np.array(losses['ndn_train'], dtype=np.float32)
+        results['train_nsn_loss'] = np.array(losses['nsn_train'], dtype=np.float32)
+        results['train_ndn_iou'] = np.array(ious['ndn_train'], dtype=np.float32)
+        results['train_nsn_iou'] = np.array(ious['nsn_train'], dtype=np.float32)
+        results['val_ndn_loss'] = np.array(losses['ndn_val'], dtype=np.float32)
+        results['val_nsn_loss'] = np.array(losses['nsn_val'], dtype=np.float32)
+        results['val_ndn_iou'] = np.array(ious['ndn_val'], dtype=np.float32)
+        results['val_nsn_iou'] = np.array(ious['nsn_val'], dtype=np.float32)
         results['lr_history'] = np.array(lr_history, dtype=np.float32)
         results['bestndn_model'] = {k: v.cpu().numpy() for k, v in
                                     best_nets['bestndn'].state_dict().items()}
