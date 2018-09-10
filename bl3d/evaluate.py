@@ -10,11 +10,13 @@ from . import transforms
 from . import params
 
 
-schema = dj.schema('ecobost_bl3d2', locals())
+schema = dj.schema('ecobost_bl3d3', locals())
+
+#TODO: Compute mean IOU
 
 
 @schema
-class Metrics(dj.Computed):
+class MeanAP(dj.Computed):
     definition = """ # object detection metrics
 
     -> train.TrainedModel

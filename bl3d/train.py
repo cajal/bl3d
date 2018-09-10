@@ -24,7 +24,7 @@ def log(*messages):
 
 
 schema = dj.schema('ecobost_bl3d3', locals())
-dj.config['external-bl3d'] = {'protocol': 'file', 'location': '/mnt/lab/users/ecobost'}
+dj.config['external-bl3d'] = {'protocol': 'file', 'location': '/mnt/scratch07/ecobost'}
 
 
 @schema

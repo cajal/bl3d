@@ -8,7 +8,7 @@ stack = dj.create_virtual_module('stack', 'pipeline_stack') # only needed when p
 from . import utils
 
 
-dj.config['external-bl3d'] = {'protocol': 'file', 'location': '/mnt/lab/users/ecobost'}
+dj.config['external-bl3d'] = {'protocol': 'file', 'location': '/mnt/scratch07/ecobost'}
 dj.config['cache'] = '/tmp/dj-cache'
 schema = dj.schema('ecobost_bl3d3', locals())
 
