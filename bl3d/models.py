@@ -181,6 +181,50 @@ class QCANet(nn.Module):
 
         return detection, segmentation
 
+    def forward_on_big_input(self, input_, block_size=160):
+        """ Forwards a volume through the network dividing it in chunks. Non-
+        differentiable.
+
+        Arguments:
+            input_ (torch.tensor): Input to the network (num_examples x num_channels x d1
+                x d2 x ...).
+            block_size (int): Size of the chunks to send through the networks. Same size
+                in all dimensions.
+
+        Returns:
+            detection, segmentation: Two heatmaps of logits in CPU. Same size as input.
+
+        Note:
+            Assumes net and volume are in the same device (usually both in GPU). If net is
+            in train mode, each chunk will be batch normalized with diff parameters.
+        """
+        import itertools
+
+        # Iterate over every chunk
+        padding = 20 # padding performed by the network, discarded of each output chunk
+        detection = torch.empty(input_.shape[0], self.ndn.out_channels, *input_.shape[2:])
+        segmentation = torch.empty(input_.shape[0], self.nsn.out_channels,
+                                   *input_.shape[2:])
+        for coords in itertools.product(*[range(0, d, block_size - 2 * padding) for d in
+                                          input_.shape[2:]]):
+            # Get next chunk
+            cut_slices = [slice(c, c + block_size) for c in coords]
+            chunk = input_[(..., *cut_slices)]
+
+            # Forward
+            chunk_detection, chunk_segmentation = self.forward(chunk)
+
+            # Assign to output dropping padded amount (special treatment for first chunk)
+            full_slices = [slice(0 if sl.start == 0 else sl.start + padding, sl.stop)
+                             for sl in cut_slices]
+            chunk_slices = [slice(0 if sl.start == 0 else padding, None) for sl in cut_slices]
+            detection[(..., *full_slices)] = chunk_detection[(..., *chunk_slices)]
+            segmentation[(..., *full_slices)] = chunk_segmentation[(..., *chunk_slices)]
+
+            del chunk, chunk_detection, chunk_segmentation
+
+        return detection, segmentation
+
     def init_parameters(self):
         self.core.init_parameters()
         self.ndn.init_parameters()
