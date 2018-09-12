@@ -6,10 +6,10 @@ def create_video(stack, interval=100, repeat_delay=1000):
     """ Create an animation of the stack. Fly-through depth axis.
 
     Arguments:
-        stack: 3-d array (depth x height x width)
-        interval: Number of milliseconds between frames
-        repeat_delay: Number of milliseconds to wait at end of presentation before
-            starting new one.
+        stack (np.array): A depth x height x width stack.
+        interval (int): Number of milliseconds between frames.
+        repeat_delay (int): Number of milliseconds to wait at end of presentation before
+            starting a new presentation.
 
     Returns:
         Figure and video handle.
@@ -20,25 +20,27 @@ def create_video(stack, interval=100, repeat_delay=1000):
     fig = plt.figure()
     num_slices = stack.shape[0]
     im = fig.gca().imshow(stack[int(num_slices / 2)])
+
     def update_img(i):
         im.set_data(stack[i])
+
     video = animation.FuncAnimation(fig, update_img, num_slices, interval=interval,
                                     repeat_delay=repeat_delay)
     # video.save('my_video.mp4', dpi=250)
-    return fig, video # if video is garbage collected, the animation stops
+    return fig, video  # if video is garbage collected, the animation stops
 
 
 def colorize_label(label, num_colors=100):
     """ Transform single int labels into RGB with random colors.
 
     Arguments:
-        label: Array with zero for background and positive integers for each detected
-            instance.
-        num_colors: Number of random colors to use.
+        label (np.array): Labelled voxels with zero for background and positive integers
+            for detected instances.
+        num_colors (int): Number of random colors to use.
 
     Returns:
-        Array (*label_shape x 3). RGB image/volume with a different random color for each
-        instance in label.
+        Array (*label_shape x 3). RGB volume with a different random color for each
+            instance in label.
     """
     from skimage import color
 
@@ -59,22 +61,20 @@ def memusage():
             if torch.is_tensor(obj):
                 print(obj.type(), obj.shape)
         except:
-            pass # other non-tensor objects
+            pass  # other non-tensor objects
 
 
 def lcn(image, sigmas=(12, 12)):
-    """ Local contrast normalization.
-
-    Normalize each pixel using mean and stddev computed on a local neighborhood.
+    """ Local contrast normalization. Normalize each pixel using mean and stddev computed
+    on a local neighborhood.
 
     We use gaussian filters rather than uniform filters to compute the local mean and std
-    to soften the effect of edges. Essentially we are using a fuzzy local neighborhood.
-    Using a hard definition of neighborhood, the equivalent will be:
-        local_mean = ndimage.uniform_filter(image, size=(32, 32))
+    to soften the effect of edges; essentially we use a fuzzy local neighborhood.
 
-    :param np.array image: Array with raw two-photon images.
-    :param tuple sigmas: List with sigmas per axes to use for the gaussian filter.
-        Smaller values result in more local neighborhoods. 15-30 microns should work fine
+    Arguments:
+        image (np.array): Raw two-photon stack.
+        sigmas (tuple): Sigmas to use for the gaussian filter (one per axis). Smaller
+            values result in more local neighborhoods. 15-30 microns should work fine
     """
     from scipy import ndimage
 
@@ -90,9 +90,10 @@ def sharpen_2pimage(image, laplace_sigma=0.7, low_percentile=3, high_percentile=
     """ Apply a laplacian filter, clip pixel range and normalize.
 
     Arguments:
-        image: Array with raw two-photon images.
-        laplace_sigma: Sigma of the gaussian used in the laplace filter.
-        low_percentile, high_percentile: Percentiles at which to clip.
+        image (np.array): Raw two-photon stack.
+        laplace_sigma (float): Sigma of the gaussian used in the laplace filter.
+        low_percentile (float): Lower percentile used to clip intensities.
+        high_percentile (float): Higher percentile used to clip intensities.
 
     Returns:
         Array of same shape as input. Sharpened image.
@@ -100,45 +101,46 @@ def sharpen_2pimage(image, laplace_sigma=0.7, low_percentile=3, high_percentile=
     from scipy import ndimage
 
     sharpened = image - ndimage.gaussian_laplace(image, laplace_sigma)
-    clipped = np.clip(sharpened, *np.percentile(sharpened, [low_percentile, high_percentile]))
+    clipped = np.clip(sharpened, *np.percentile(sharpened, [low_percentile,
+                                                            high_percentile]))
     norm = (clipped - clipped.mean()) / (clipped.max() - clipped.min() + 1e-7)
 
     return norm
 
 
-def combine_masks(shape, masks, bboxes, use_ids=True):
-    """ Combines masks into a single 3-d volume using bbox coordinates.
-
-    If two masks are defined in the same voxel, we select the one that appears first in
-    the list.
+def prob2labels(detection, segmentation_, seg_threshold=0.5, min_voxels=65,
+                max_voxels=4589):
+    """ Create instance segmentations using centroid predictions and cell segmentations.
 
     Arguments:
-        shape: A tuple. Shape of the full volume.
-        masks: A list of arrays. The masks to combine.
-        bboxes: NMASKS x 2*DIM array. The bbox coordinates of each mask (z, y, x, ...,
-            d, h, w, ...).
-        use_ids: Boolean. Set voxels where mask is positive to the index of the mask.
+        detection (np.array): 3-d probability heatmap.
+        segmentation (np.array): 3-d probability heatmap.
+        threshold (np.array): Threshold for the segmentation heatmap.
+        min_voxels (int): Minimum number of voxels a final mask would have.
+        max_voxels (int): Maximum number of voxels a final mask would have
 
     Returns:
-        An array with all masks in their respective position.
+        label: Array with same shape as segmentation with zero for background and positive
+            integer ids for each predicted instance.
     """
-    # Compute masks indices (where to paste them in the output volume)
-    dim = bboxes.shape[1] // 2
-    low_indices = np.round(bboxes[:, :dim] - bboxes[:, dim:] / 2).astype(int) # N x dim
-    high_indices = np.round(bboxes[:, :dim] + bboxes[:, dim:] / 2).astype(int) # N x dim
-    mask_slices = [tuple(slice(np.clip(-l, 0, h - l), h - l - np.clip(h - s, 0, h - l))
-                         for l, h, s in zip(low, high, shape)) for low, high in
-                   zip(low_indices, high_indices)]
-    full_slices = [tuple(slice(max(l, 0), max(h, 0)) for l, h in zip(low, high)) for
-                   low, high in zip(low_indices, high_indices)]
+    from skimage import feature, morphology, measure, segmentation
 
-    # Create combined volume
-    volume = np.zeros(shape, dtype=(int if use_ids else float))
-    for i, mask, sl, mask_sl in zip(range(len(masks), -1, -1), masks[::-1],
-                                    full_slices[::-1], mask_slices[::-1]):
-        if use_ids:
-            volume[sl][mask[mask_sl]] = i + 1 # indices start at 1
-        else:
-            volume[sl] = mask[mask_sl]
+    # Create binary segmentation
+    binary_masks = morphology.remove_small_holes(segmentation_ > seg_threshold)
 
-    return volume
+    # Watershed segmentation using centroids from detection
+    peaks = feature.peak_local_max(detection, footprint=morphology.ball(4),
+                                   labels=binary_masks, indices=False)
+    markers = morphology.label(peaks)
+    masks = morphology.watershed(-segmentation_, markers, mask=binary_masks,
+                                 connectivity=3)
+    print(masks.max(), 'initial cells')
+
+    # Remove masks that are too small or too big (usually bad detections)
+    mask_sizes = np.bincount(masks.ravel())
+    to_keep = np.logical_and(mask_sizes >= min_voxels, mask_sizes <= max_voxels)
+    masks[~to_keep[masks]] = 0  # set to background
+    label, _, _ = segmentation.relabel_sequential(masks)
+    print(label.max(), 'final cells')
+
+    return label
