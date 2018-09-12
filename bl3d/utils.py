@@ -129,8 +129,8 @@ def prob2labels(detection, segmentation_, seg_threshold=0.5, min_voxels=65,
     binary_masks = morphology.remove_small_holes(segmentation_ > seg_threshold)
 
     # Watershed segmentation using centroids from detection
-    peaks = feature.peak_local_max(detection, footprint=morphology.ball(4),
-                                   labels=binary_masks, indices=False)
+    peaks = feature.peak_local_max(detection, footprint=morphology.ball(4), indices=False,
+                                   labels=binary_masks, exclude_border=False)
     markers = morphology.label(peaks)
     masks = morphology.watershed(-segmentation_, markers, mask=binary_masks,
                                  connectivity=3)
