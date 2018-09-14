@@ -251,7 +251,7 @@ class InstanceMetrics(dj.Computed):
             ('bestnsn', self.BestNSNMuCov, self.BestNSNAP)]:
 
             # Get model
-            net = train.TrainedModel.load_model(key, model_name)
+            net = train.QCANet.load_model(key, model_name)
             net.cuda()
             net.eval()
 
@@ -291,7 +291,8 @@ class InstanceMetrics(dj.Computed):
                         sorted_matches = sorted(matches, reverse=True)
 
                         # Accumulate highest IOU for this predicted mask
-                        total_best_ious[i] += sorted_matches[0][0]
+                        if sorted_matches:
+                            total_best_ious[i] += sorted_matches[0][0]
 
                         # Assign mask to highest overlap match in ground truth label
                         for iou, match in sorted_matches:
