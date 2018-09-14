@@ -147,14 +147,14 @@ class TrainingSplit(dj.Lookup):
 #     contents = [
 #         [1, 0.5, 0.0001, 3, 1.5, 0.5]
 #     ]
-#
-#
-# @schema
-# class EvalSet(dj.Lookup):
-#     definition = """ # set where metrics are computed
-#     eval_set:    varchar(8)
-#     """
-#     contents = [
-#         ['train'],
-#         ['val']
-#     ]
+
+
+@schema
+class EvalSet(dj.Lookup):
+    definition = """ # set where metrics are computed
+    eval_set:    varchar(8)
+    """
+    contents = [
+        ['train'],
+        ['val']
+    ]

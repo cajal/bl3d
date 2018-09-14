@@ -8,193 +8,370 @@ from . import train
 from . import datasets
 from . import transforms
 from . import params
+from . import utils
 
 
 schema = dj.schema('ecobost_bl3d3', locals())
 
-#TODO: Compute mean IOU
-
 
 @schema
-class MeanAP(dj.Computed):
-    definition = """ # object detection metrics
-
-    -> train.TrainedModel
-    -> params.EvalParams
+class SemanticMetrics(dj.Computed):
+    definition = """ # standard voxel-wise segmentation metrics 
+    
+    -> train.QCANet
     -> params.EvalSet
-    ---
-    map:            float       # mean average precision over all acceptance IOUs (same as COCO's mAP)
-    mf1:            float       # mean F1 over all acceptance IOUs
-    ap_50:          float       # average precision at IOU = 0.5 (default in Pascal VOC)
-    ap_75:          float       # average precision at IOU = 0.75 (more strict)
-    f1_50:          float       # F-1 at acceptance IOU = 0.5
-    f1_75:          float       # F-1 at acceptance IOU = 0.75
     """
 
-    class PerIOU(dj.Part):
-        definition = """ # some metrics computed at a single acceptance IOUs
+    @property
+    def key_source(self):
+        return super().key_source & {'eval_set': 'val'}
 
+    class BestNDN(dj.Part):
+        definition = """ # metrics for the bestndn model
+        
         -> master
-        iou:                float       # acceptance iou used
+        threshold:              decimal(4, 3)   # (prob) threshold used for predictions   
         ---
-        ap_precisions:      blob        # precisions at recall (0, 0.1, ... 0.9, 1)
-        ap:                 float       # average precision (area under PR curve)
-        tps:                int         # true positives
-        fps:                int         # false positives
-        fns:                int         # false negatives
-        accuracy:           float
-        precision:          float
-        recall:             float
-        f1:                 float       # F-1 score
+        detection_iou:          float
+        detection_f1:           float
+        detection_accuracy:     float
+        detection_precision:    float
+        detection_recall:       float
+        detection_specificity:  float 
+        segmentation_iou:       float
+        segmentation_f1:        float
+        segmentation_accuracy:  float
+        segmentation_precision: float
+        segmentation_recall:    float
+        segmentation_specificity:float 
+        """
+
+    class BestNSN(dj.Part):
+        definition = """ # metrics for the bestnsn model
+        
+        -> master
+        threshold:              decimal(4, 3)   # (prob) threshold used for predictions   
+        ---
+        detection_iou:          float
+        detection_f1:           float
+        detection_accuracy:     float
+        detection_precision:    float
+        detection_recall:       float
+        detection_specificity:  float 
+        segmentation_iou:       float
+        segmentation_f1:        float
+        segmentation_accuracy:  float
+        segmentation_precision: float
+        segmentation_recall:    float
+        segmentation_specificity:float 
         """
 
     def make(self, key):
-        """ Compute mean average precision and other detection metrics
-
-        Pseudocode for mAP as computed in COCO (Everingham et al., 2010; Sec 4.2):
-            for each class
-                for each image
-                    Predict k bounding boxes and k confidences
-                    Order by decreasing confidence
-                    for each bbox
-                        for each acceptance_iou in [0.5, 0.55, 0.6, ..., 0.85, 0.9, 0.95]
-                            Find the highest IOU ground truth box that has not been assigned yet
-                            if highest iou > acceptance_iou
-                                Save whether bbox is a match (and with whom it matches)
-                        accum results over all acceptance ious
-                    accum results over all bboxes
-                accum results over all images
-
-                Reorder by decreasing confidence
-                for each acceptance_iou in [0.5, 0.55, 0.6, ..., 0.85, 0.9, 0.95]:
-                    Compute precision and recall at each example
-                    for r in 0, 0.1, 0.2, ..., 1:
-                        find precision at r as max(prec) at recall >= r
-                    average all 11 precisions -> average precision at detection_iou
-                average all aps -> average precision
-            average over all clases -> mean average precision
-        """
         print('Evaluating', key)
-        eval_params = (params.EvalParams & key).fetch1()
-
-        # Get model
-        net = train.TrainedModel.load_model(key)
-        net.nms_iou = eval_params['nms_iou']
-        net.cuda()
-        net.eval()
 
         # Get dataset
-        examples = (params.TrainingSplit & key).fetch1('{}_examples'.format(key['eval_set']))
-        enhance_volume = (params.TrainingParams & key).fetch1('enhanced_input')
+        examples_name = '{}_examples'.format(key['eval_set'])
+        examples = (params.TrainingSplit & key).fetch1(examples_name)
+        normalize_volume, centroid_radius = (params.TrainingParams & key).fetch1(
+            'normalize_volume', 'centroid_radius')
         dataset = datasets.DetectionDataset(examples, transforms.ContrastNorm(),
-                                            enhance_volume, net.anchor_size)
-        dataloader = data.DataLoader(dataset, num_workers=2, pin_memory=True)
+                                            normalize_volume=normalize_volume,
+                                            centroid_radius=centroid_radius)
+        dataloader = data.DataLoader(dataset, num_workers=4, pin_memory=True)
 
-        # Accumulate true positives, false positives and false negatives across examples
-        acceptance_ious = np.arange(0.5, 1, 0.05)
-        num_gt_instances = 0 # number of ground truth instances
-        num_pred_instances = 0 # number of predicted masks
-        confidences = [] # confidence per predicted mask
-        tps = np.empty([len(acceptance_ious), 0], dtype=bool) # ious x masks, whether mask is a match
-        for volume, label, _, _ in dataloader:
-            # Compute num_proposals and num_masks to use
-            num_cells = np.prod(volume.shape) * eval_params['cells_per_um']
-            num_proposals = int(round(num_cells * eval_params['proposal_factor']))
-            num_masks = int(round(num_cells * eval_params['mask_factor']))
+        # Once for bestndn and once for bestnsn
+        for model_name, model_rel in [('bestndn', self.BestNDN),
+                                      ('bestnsn', self.BestNSN)]:
+            # Get model
+            net = train.QCANet.load_model(key, model_name)
+            net.cuda()
+            net.eval()
 
-            # Create instance segmentations
-            with torch.no_grad():
-                probs, bboxes, masks = net.forward_eval(volume.cuda(), num_proposals,
-                                                        num_masks)
-            probs = 1 / (1 + np.exp(-probs)) # sigmoid
-            masks = [1 / (1 + np.exp(-m)) for m in masks]
-            label = label[0].numpy()
+            # Iterate over images
+            num_thresholds = 41
+            thresholds = np.linspace(0, 1, num_thresholds)
+            detection_tps = np.zeros(num_thresholds)  # true positives
+            detection_fps = np.zeros(num_thresholds)  # false positives
+            detection_tns = np.zeros(num_thresholds)  # true negatives
+            detection_fns = np.zeros(num_thresholds)  # false negatives
+            segmentation_tps = np.zeros(num_thresholds)
+            segmentation_fps = np.zeros(num_thresholds)
+            segmentation_tns = np.zeros(num_thresholds)
+            segmentation_fns = np.zeros(num_thresholds)
+            for volume, label, centroids in dataloader:
+                # Get predictions
+                with torch.no_grad():
+                    detection, segmentation = net.forward_on_big_input(volume.cuda())
+                    detection = torch.sigmoid(detection).squeeze().numpy()
+                    segmentation = torch.sigmoid(segmentation).squeeze().numpy()
 
-            # Compute limits of each mask (used for slicing below)
-            low_indices = np.round(bboxes[:, :3] - bboxes[:, 3:] / 2 + 1e-7).astype(int)
-            high_indices = np.round(bboxes[:, :3] + bboxes[:, 3:] / 2 + 1e-7).astype(int)
+                # Compute voxel-wise confusion matrix
+                for i, threshold in enumerate(thresholds):
+                    tp, fp, tn, fn = compute_confusion_matrix(detection > threshold,
+                                                              centroids[0].numpy())
+                    detection_tps[i] += tp
+                    detection_fps[i] += fp
+                    detection_tns[i] += tn
+                    detection_fns[i] += fn
 
-            # Match each predicted mask to a ground truth mask
-            mask_tps = np.zeros([len(acceptance_ious), len(probs)], dtype=bool)
-            gt_tps = np.zeros([len(acceptance_ious), label.max()], dtype=bool)
-            for _, i, mask, low, high in sorted(zip(probs, range(len(probs)), masks,
-                                                    low_indices, high_indices),
-                                                reverse=True):
-                # Reshape mask to full size
-                full_mask = np.zeros(label.shape, dtype=bool)
-                full_slices = tuple(slice(max(l, 0), max(h, 0)) for l, h in zip(low, high))
-                mask_slices = tuple(slice(np.clip(-l, 0, h - l), h - l - np.clip(h - s, 0, h - l))
-                                    for l, h, s in zip(low, high, label.shape))
-                full_mask[full_slices] = mask[mask_slices] > eval_params['mask_threshold']
+                    tp, fp, tn, fn = compute_confusion_matrix(segmentation > threshold,
+                                                              label[0].numpy())
+                    segmentation_tps[i] += tp
+                    segmentation_fps[i] += fp
+                    segmentation_tns[i] += tn
+                    segmentation_fns[i] += fn
 
-                # Assign mask to highest overlap match in ground truth label
-                matches = find_matches(label, full_mask)
-                for iou, match in sorted(matches, reverse=True):
-                    is_acceptable = iou > acceptance_ious
-                    is_unassigned = ~np.logical_or(gt_tps[:, match - 1], mask_tps[:, i])
-                    mask_tps[:, i] = np.logical_and(is_acceptable, is_unassigned)
-                    gt_tps[:, match - 1] = np.logical_and(is_acceptable, is_unassigned)
+                del volume, label, centroids, detection, segmentation
 
-            # Accumulate results
-            num_gt_instances += label.max()
-            num_pred_instances += len(probs)
-            confidences.extend(probs)
-            tps = np.concatenate([tps, mask_tps], axis=1)
+            # Compute metrics
+            detection_metrics = compute_metrics(detection_tps, detection_fps,
+                                                detection_tns, detection_fns)
+            segmentation_metrics = compute_metrics(segmentation_tps, segmentation_fps,
+                                                   segmentation_tns, segmentation_fns)
 
-        # Compute precision and recall at each prediction point (after sorting by confidence)
-        tps = tps[:, np.argsort(confidences)[::-1]]
-        precision = np.cumsum(tps, 1) / np.arange(1, num_pred_instances + 1)
-        recall = np.cumsum(tps, 1) / num_gt_instances
-
-        # Add precisions at recall 0 and 1
-        recall = np.concatenate([np.zeros((10, 1)), recall, np.ones((10, 1))], axis=1)
-        precision = np.concatenate([precision[:, :1], precision, np.zeros((10, 1))], axis=1)
-
-        # Make sure precision increases monotonically (from right to left)
-        precision = np.maximum.accumulate(precision[:, ::-1], 1)[:, ::-1]
-
-        # Compute mAP (area under the precision recall curve)
-        ap_precisions = [[p[bisect.bisect_left(r, i)]  for i in np.linspace(0, 1, 11)]
-                         for p, r in zip(precision, recall)]
-        aps = np.mean(ap_precisions, axis=1) # per acceptance iou
-        mAP = np.mean(aps)
-
-        # Compute other metrics
-        tp, fp, tn, fn = (tps.sum(1), num_pred_instances - tps.sum(1), 0,
-                          num_gt_instances - tps.sum(1))
-        metrics = compute_metrics(tp, fp, tn, fn)
-
-        # Insert
-        self.insert1({**key, 'map': mAP, 'mf1': metrics[1].mean(), 'ap_50': aps[0],
-                      'ap_75': aps[5], 'f1_50': metrics[1][0], 'f1_75': metrics[1][5]})
-        for (iou, ap_precisions_, ap, tp_, fp_, fn_, _, f1, accuracy, _, _, precision,
-             recall) in zip(acceptance_ious, ap_precisions, aps, tp, fp, fn, *metrics):
-            self.PerIOU().insert1({**key, 'iou': iou, 'ap_precisions': ap_precisions_,
-                                   'ap': ap, 'tps': tp_, 'fps': fp_, 'fns': fn_,
-                                   'accuracy': accuracy, 'precision': precision,
-                                   'recall': recall, 'f1': f1})
+            # Insert
+            self.insert1(key, skip_duplicates=True)
+            for (threshold, detection_iou, detection_f1, detection_accuracy, _,
+                 detection_specificity, detection_precision, detection_recall,
+                 segmentation_iou, segmentation_f1, segmentation_accuracy, _,
+                 segmentation_specificity, segmentation_precision, segmentation_recall) \
+                    in zip(thresholds, *detection_metrics, *segmentation_metrics):
+                model_rel.insert1({**key, 'threshold': threshold,
+                                   'detection_iou': detection_iou,
+                                   'detection_f1': detection_f1,
+                                   'detection_accuracy': detection_accuracy,
+                                   'detection_specificity': detection_specificity,
+                                   'detection_precision': detection_precision,
+                                   'detection_recall': detection_recall,
+                                   'segmentation_iou': segmentation_iou,
+                                   'segmentation_f1': segmentation_f1,
+                                   'segmentation_accuracy': segmentation_accuracy,
+                                   'segmentation_specificity': segmentation_specificity,
+                                   'segmentation_precision': segmentation_precision,
+                                   'segmentation_recall': segmentation_recall})
 
 
-def find_matches(labels, prediction):
-    """ Find all labels that intersect with a given predicted mask (and their IOUs).
+@schema
+class InstanceMetrics(dj.Computed):
+    definition = """  # instance segmentation metrics
+
+    -> train.QCANet
+    -> params.EvalSet
+    """
+
+    @property
+    def key_source(self):
+        return super().key_source & {'eval_set': 'val'}
+
+    class BestNDNMuCov(dj.Part):
+        definition = """ # average of the IOU of each predicted mask with its highest overlapping ground truth object 
+        -> master
+        threshold:              decimal(4, 3)   # (prob) Threshold used to generate the masks
+        ---
+        mucov:                  float
+        """
+        # MuCov = mean_i (max_j IOU(x_i, y_j)); where x_i is a predicted mask, and y_j is
+        # a ground truth mask
+
+    class BestNDNAP(dj.Part):
+        definition=""" # metrics using a single acceptance IOU to determine correct detections
+        -> master
+        threshold:              decimal(4, 3)   # (prob) Threshold used to generate the masks
+        iou:                    decimal(3, 2)
+        ---
+        precisions:             tinyblob        # precision at recall (0, 0.1, ... 0.9, 1)
+        ap:                     float           # average precision across recalls (area under the PR curve)
+        precision:              float           # proportion of predicted objects that are ground truth objects (IOU(x,y) > iou)  
+        recall:                 float           # proportion of ground truth objects detected        
+        f1:                     float           # F1-score
+        """
+        # # Pseudocode for mAP as computed in COCO (Everingham et al., 2010; Sec 4.2):
+        # for each class
+        #     for each image
+        #         Predict k bounding boxes and k confidences
+        #         Order by decreasing confidence
+        #         for each bbox
+        #             for each acceptance_iou in [0.5, 0.55, 0.6, ..., 0.85, 0.9, 0.95]
+        #                 Find the highest IOU ground truth box that has not been assigned yet
+        #                 if highest iou > acceptance_iou
+        #                     Save whether bbox is a match (and with whom it matches)
+        #                 accum results over all acceptance ious
+        #             accum results over all bboxes
+        #         accum results over all images
+        #
+        #     Reorder by decreasing confidence
+        #     for each acceptance_iou in [0.5, 0.55, 0.6, ..., 0.85, 0.9, 0.95]:
+        #         Compute precision and recall at each example
+        #         for r in 0, 0.1, 0.2, ..., 1:
+        #             find precision at r as max(prec) at recall >= r
+        #         average all 11 precisions -> average precision at detection_iou
+        #     average all aps -> average precision
+        # average over all clases -> mean average precision
+
+    class BestNSNMuCov(dj.Part):
+        definition = """ # average of the IOU of each predicted mask with its highest overlapping ground truth object
+        -> master
+        threshold:              decimal(4, 3)   # (prob) Threshold used to generate the masks
+        ---
+        mucov:                  float
+        """
+
+    class BestNSNAP(dj.Part):
+        definition = """ # metrics using a single acceptance IOU to determine correct detections
+        -> master
+        threshold:              decimal(4, 3)  # (prob) Threshold used to generate the masks
+        iou:                    decimal(3, 2) 
+        ---
+        precisions:             tinyblob        # precision at recall (0, 0.1, ... 0.9, 1)
+        ap:                     float           # average precision across recalls (area under the PR curve)
+        precision:              float           # proportion of predicted objects that are ground truth objects (IOU(x,y) > iou)  
+        recall:                 float           # proportion of ground truth objects detected        
+        f1:                     float           # F1-score
+        """
+
+    def make(self, key):
+        from skimage import measure
+
+        print('Evaluating', key)
+
+        # Get dataset
+        examples_name = '{}_examples'.format(key['eval_set'])
+        examples = (params.TrainingSplit & key).fetch1(examples_name)
+        normalize_volume, centroid_radius = (params.TrainingParams & key).fetch1(
+            'normalize_volume', 'centroid_radius')
+        dataset = datasets.DetectionDataset(examples, transforms.ContrastNorm(),
+                                            normalize_volume=normalize_volume,
+                                            centroid_radius=centroid_radius,
+                                            binarize_labels=False)
+        dataloader = data.DataLoader(dataset, num_workers=4, pin_memory=True)
+
+        # Once for bestndn and once for bestnsn
+        for model_name, mucov_rel, ap_rel in [
+            ('bestndn', self.BestNDNMuCov, self.BestNDNAP),
+            ('bestnsn', self.BestNSNMuCov, self.BestNSNAP)]:
+
+            # Get model
+            net = train.TrainedModel.load_model(key, model_name)
+            net.cuda()
+            net.eval()
+
+            # Set some parameters
+            num_thresholds = 41
+            thresholds = np.linspace(0, 1, num_thresholds)
+            acceptance_ious = np.arange(0.5, 1, 0.05)
+            num_ious = len(acceptance_ious)
+
+            # Accumulate metrics across examples
+            total_best_ious = np.zeros(num_thresholds)  # sum of max ious per prediction
+            num_gt_instances = np.zeros(num_thresholds)  # number of ground truth instances
+            num_pred_instances = np.zeros(num_thresholds)  # number of predicted masks
+            confidences = [[] for _ in range(num_thresholds)]  # confidence per predicted mask
+            tps = [np.empty([num_ious, 0], dtype=bool) for _ in range(num_thresholds)]  # ious x sorted_masks, whether mask is a match
+            for volume, label, centroids in dataloader:
+                # Get predictions
+                with torch.no_grad():
+                    detection, segmentation = net.forward_on_big_input(volume.cuda())
+                    detection = torch.sigmoid(detection).squeeze().numpy()
+                    segmentation = torch.sigmoid(segmentation).squeeze().numpy()
+                    label = label[0].numpy()
+
+                for i, threshold in enumerate(thresholds):
+                    # Create instance segmentation
+                    masks = utils.prob2labels(detection, segmentation, threshold)
+                    mask_properties = measure.regionprops(masks, segmentation)
+                    probs = [p.mean_intensity for p in mask_properties]
+
+                    # Match each predicted mask to a ground truth mask
+                    mask_tps = np.zeros([num_ious, len(probs)], dtype=bool)
+                    gt_tps = np.zeros([num_ious, label.max()], dtype=bool)
+                    for mask_id, _ in sorted(enumerate(probs), key=lambda x: x[1],
+                                             reverse=True):
+                        # Find all overlapping ground truth objects
+                        matches = find_matches(label, (masks == mask_id + 1))
+                        sorted_matches = sorted(matches, reverse=True)
+
+                        # Accumulate highest IOU for this predicted mask
+                        total_best_ious[i] += sorted_matches[0][0]
+
+                        # Assign mask to highest overlap match in ground truth label
+                        for iou, match in sorted_matches:
+                            is_acceptable = iou > acceptance_ious
+                            is_unassigned = ~np.logical_or(gt_tps[:, match - 1],
+                                                           mask_tps[:, mask_id])
+                            mask_tps[:, mask_id] = np.logical_and(is_acceptable,
+                                                                  is_unassigned)
+                            gt_tps[:, match - 1] = np.logical_and(is_acceptable,
+                                                                  is_unassigned)
+
+                    # Accumulate results
+                    num_gt_instances[i] += label.max()
+                    num_pred_instances[i] += len(probs)
+                    confidences[i].extend(probs)
+                    tps[i] = np.concatenate([tps[i], mask_tps], axis=1)
+
+            # Compute MuCov
+            mucov = total_best_ious / num_pred_instances
+
+            # Compute precisions at (0, 0.1, ...0.9, 1.0) recall
+            precisions = np.empty((num_thresholds, num_ious, 11))
+            for i, (
+            tps_, confidences_, num_pred_instances_, num_gt_instances_) in enumerate(
+                    zip(tps, confidences, num_pred_instances, num_gt_instances)):
+                # Compute precision and recall at each prediction point (after sorting by confidence)
+                tps_ = tps_[:, np.argsort(confidences_)[::-1]]
+                precision = np.cumsum(tps_, 1) / np.arange(1, num_pred_instances_ + 1)
+                recall = np.cumsum(tps_, 1) / num_gt_instances_
+
+                # Add precisions at recall 0 and 1
+                recall = np.concatenate([np.zeros((num_ious, 1)), recall,
+                                         np.ones((num_ious, 1))], axis=1)
+                precision = np.concatenate([precision[:, :1], precision,
+                                            np.zeros((num_ious, 1))], axis=1)
+
+                # Make sure precision increases monotonically (from right to left)
+                precision = np.maximum.accumulate(precision[:, ::-1], 1)[:, ::-1]
+
+                # Compute mAP (area under the precision recall curve)
+                precisions[i] = [[p[bisect.bisect_left(r, i)] for i in np.linspace(0, 1, 11)]
+                                 for p, r in zip(precision, recall)]
+            aps = np.mean(precisions, axis=-1)  # thresholds x ious
+
+            # Compute other metrics
+            tps = np.array([tps_.sum(1) for tps_ in tps])  # thresholds x ious
+            tp, fp, tn, fn = (tps, num_pred_instances[: None] - tps, 0,
+                              num_gt_instances[:, None] - tps)
+            _, f1, _, _, _, precision, recall = compute_metrics(tp, fp, tn, fn)
+
+            # Insert
+            self.insert1(key, skip_duplicates=True)
+            for threshold, mucov_ in zip(thresholds, mucov):
+                mucov_rel.insert1({**key, 'threshold': threshold, 'mucov': mucov_})
+            for row_precisions, row_aps, row_precision, row_recall, row_f1 in zip(
+                    precisions, aps, precision, recall, f1):
+                for precisions_, ap_, precision_, recall_, f1_ in zip(row_precisions,
+                    row_aps, row_precision, row_recall, row_f1):
+                    ap_rel.insert1({**key, 'precisions': precisions, 'ap': ap_,
+                                    'precision': precision_, 'recall': recall_,
+                                    'f1': f1_})
+
+
+def compute_confusion_matrix(segmentation, label):
+    """Confusion matrix for a single image: # of pixels in each category.
 
     Arguments:
-        labels: Array with zeros for background and positive integers for each ground
-            truth object in the volume.
-        prediction: Boolean array with ones for the predicted mask. Same shape as labels.
+        segmentation: Boolean array. Predicted segmentation.
+        label: Boolean array. Expected segmentation.
 
     Returns:
-        List of (iou, label) pairs.
+        A quadruple with true positives, false positives, true negatives and false
+            negatives
     """
-    res = []
-    for m in filter(lambda x: x != 0, np.unique(labels[prediction])):
-        label = labels == m
-        union = np.logical_or(label, prediction)
-        intersection = np.logical_and(label[union], prediction[union]) # bit faster
-        iou = np.count_nonzero(intersection) / np.count_nonzero(union)
-        res.append((iou, m))
+    true_positive = np.logical_and(segmentation, label).sum()
+    false_positive = np.logical_and(segmentation, np.logical_not(label)).sum()
+    true_negative = np.logical_and(np.logical_not(segmentation), np.logical_not(label)).sum()
+    false_negative = np.logical_and(np.logical_not(segmentation), label).sum()
 
-    return res
+    return (true_positive, false_positive, true_negative, false_negative)
 
 
 def compute_metrics(true_positive, false_positive, true_negative, false_negative):
@@ -223,3 +400,25 @@ def compute_metrics(true_positive, false_positive, true_negative, false_negative
     f1 = (2 * precision * recall) / (precision + recall + epsilon)
 
     return iou, f1, accuracy, sensitivity, specificity, precision, recall
+
+
+def find_matches(labels, prediction):
+    """ Find all labels that intersect with a given predicted mask (and their IOUs).
+
+    Arguments:
+        labels: Array with zeros for background and positive integers for each ground
+            truth object in the volume.
+        prediction: Boolean array with ones for the predicted mask. Same shape as labels.
+
+    Returns:
+        List of (iou, label) pairs.
+    """
+    res = []
+    for m in filter(lambda x: x != 0, np.unique(labels[prediction])):
+        label = labels == m
+        union = np.logical_or(label, prediction)
+        intersection = np.logical_and(label[union], prediction[union]) # bit faster
+        iou = np.count_nonzero(intersection) / np.count_nonzero(union)
+        res.append((iou, m))
+
+    return res
