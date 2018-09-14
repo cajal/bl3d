@@ -126,14 +126,15 @@ def prob2labels(detection, segmentation_, seg_threshold=0.5, min_voxels=65,
     from skimage import feature, morphology, measure, segmentation
 
     # Create binary segmentation
-    binary_masks = morphology.remove_small_holes(segmentation_ > seg_threshold)
+    binary_masks = segmentation_ > seg_threshold
 
     # Watershed segmentation using centroids from detection
     peaks = feature.peak_local_max(detection, footprint=morphology.ball(4), indices=False,
-                                   labels=binary_masks, exclude_border=False)
+                                   exclude_border=False)
+    peaks[~binary_masks] = 0 # restrict to peaks in cell bodies
     markers = morphology.label(peaks)
     masks = morphology.watershed(-segmentation_, markers, mask=binary_masks,
-                                 connectivity=3)
+                                 connectivity=3, compactness=0.05)
     print(masks.max(), 'initial cells')
 
     # Remove masks that are too small or too big (usually bad detections)
