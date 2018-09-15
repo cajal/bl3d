@@ -256,8 +256,8 @@ class InstanceMetrics(dj.Computed):
             net.eval()
 
             # Set some parameters
-            num_thresholds = 41
-            thresholds = np.linspace(0, 1, num_thresholds)
+            num_thresholds = 11
+            thresholds = np.linspace(0.75, 0.95, num_thresholds)
             acceptance_ious = np.arange(0.5, 1, 0.05)
             num_ious = len(acceptance_ious)
 
@@ -284,10 +284,29 @@ class InstanceMetrics(dj.Computed):
                     # Match each predicted mask to a ground truth mask
                     mask_tps = np.zeros([num_ious, len(probs)], dtype=bool)
                     gt_tps = np.zeros([num_ious, label.max()], dtype=bool)
+                    mask_bboxes = np.array([p.bbox for p in mask_properties])
+                    gt_bboxes = np.array([p.bbox for p in measure.regionprops(label)])
                     for mask_id, _ in sorted(enumerate(probs), key=lambda x: x[1],
                                              reverse=True):
+                        # Find bbox containing mask and any overlapping gt object
+                        mask_bbox = mask_bboxes[mask_id]
+                        mask_slices = (slice(mask_bbox[0], mask_bbox[3]),
+                                       slice(mask_bbox[1], mask_bbox[4]),
+                                       slice(mask_bbox[2], mask_bbox[5]))
+                        gt_ids = np.unique(label[mask_slices][masks[mask_slices] ==
+                                                              (mask_id + 1)])
+                        gt_indices = gt_ids[gt_ids != 0] - 1
+                        overlapping_bboxes = gt_bboxes[gt_indices]
+
+                        all_bboxes = np.concatenate([mask_bbox[None], overlapping_bboxes])
+                        low_coords = np.min(all_bboxes[:, :3], axis=0)
+                        high_coords = np.max(all_bboxes[:, 3:], axis=0)
+                        full_slices = tuple(slice(l, h) for l, h in zip(low_coords,
+                                                                        high_coords))
+
                         # Find all overlapping ground truth objects
-                        matches = find_matches(label, (masks == mask_id + 1))
+                        matches = find_matches(label[full_slices],
+                                               masks[full_slices] == (mask_id + 1))
                         sorted_matches = sorted(matches, reverse=True)
 
                         # Accumulate highest IOU for this predicted mask
@@ -315,8 +334,7 @@ class InstanceMetrics(dj.Computed):
 
             # Compute precisions at (0, 0.1, ...0.9, 1.0) recall
             precisions = np.empty((num_thresholds, num_ious, 11))
-            for i, (
-            tps_, confidences_, num_pred_instances_, num_gt_instances_) in enumerate(
+            for i, (tps_, confidences_, num_pred_instances_, num_gt_instances_) in enumerate(
                     zip(tps, confidences, num_pred_instances, num_gt_instances)):
                 # Compute precision and recall at each prediction point (after sorting by confidence)
                 tps_ = tps_[:, np.argsort(confidences_)[::-1]]
