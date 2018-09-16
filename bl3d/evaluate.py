@@ -357,7 +357,7 @@ class InstanceMetrics(dj.Computed):
 
             # Compute other metrics
             tps = np.array([tps_.sum(1) for tps_ in tps])  # thresholds x ious
-            tp, fp, tn, fn = (tps, num_pred_instances[: None] - tps, 0,
+            tp, fp, tn, fn = (tps, num_pred_instances[:, None] - tps, 0,
                               num_gt_instances[:, None] - tps)
             _, f1, _, _, _, precision, recall = compute_metrics(tp, fp, tn, fn)
 
