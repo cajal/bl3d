@@ -365,11 +365,13 @@ class InstanceMetrics(dj.Computed):
             self.insert1(key, skip_duplicates=True)
             for threshold, mucov_ in zip(thresholds, mucov):
                 mucov_rel.insert1({**key, 'threshold': threshold, 'mucov': mucov_})
-            for row_precisions, row_aps, row_precision, row_recall, row_f1 in zip(
-                    precisions, aps, precision, recall, f1):
-                for precisions_, ap_, precision_, recall_, f1_ in zip(row_precisions,
-                    row_aps, row_precision, row_recall, row_f1):
-                    ap_rel.insert1({**key, 'precisions': precisions, 'ap': ap_,
+            for threshold_, row_precisions, row_aps, row_precision, row_recall, row_f1 in zip(
+                    thresholds, precisions, aps, precision, recall, f1):
+                for iou_, precisions_, ap_, precision_, recall_, f1_ in zip(
+                        acceptance_ious, row_precisions, row_aps, row_precision,
+                        row_recall, row_f1):
+                    ap_rel.insert1({**key, 'threshold': threshold_, 'iou': iou_,
+                                    'precisions': precisions_, 'ap': ap_,
                                     'precision': precision_, 'recall': recall_,
                                     'f1': f1_})
 
