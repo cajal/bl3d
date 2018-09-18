@@ -167,10 +167,10 @@ class QCANet(dj.Computed):
                                            train_params['nsn_threshold'])
 
                 # Record training losses
-                losses['ndn_train'] = ndn_loss.item()
-                losses['nsn_train'] = nsn_loss.item()
-                ious['ndn_train'] = ndn_iou.item()
-                ious['nsn_train'] = nsn_iou.item()
+                losses['ndn_train'].append(ndn_loss.item())
+                losses['nsn_train'].append(nsn_loss.item())
+                ious['ndn_train'].append(ndn_iou.item())
+                ious['nsn_train'].append(nsn_iou.item())
                 log(('Training loss (iou * 100) for ndn / nsn: {:.5f} ({:04.2f}) / {:.5f}'
                      ' ({:04.2f})').format(ndn_loss.item(), ndn_iou.item() * 100,
                                            nsn_loss.item(), nsn_iou.item() * 100))
@@ -210,10 +210,10 @@ class QCANet(dj.Computed):
                 val_nsn_iou = total_nsn_iou / len(val_dloader)
 
                 # Record validation loss
-                losses['ndn_val'] = val_ndn_loss
-                losses['nsn_val'] = val_nsn_loss
-                ious['ndn_val'] = val_ndn_iou
-                ious['nsn_val'] = val_nsn_iou
+                losses['ndn_val'].append(val_ndn_loss)
+                losses['nsn_val'].append(val_nsn_loss)
+                ious['ndn_val'].append(val_ndn_iou)
+                ious['nsn_val'].append(val_nsn_iou)
                 log(('Validation loss (iou * 100) for ndn / nsn: {:.5f} ({:04.2f}) / '
                      '{:.5f} ({:04.2f})').format(val_ndn_loss, val_ndn_iou * 100,
                                                  val_nsn_loss, val_nsn_iou * 100))
