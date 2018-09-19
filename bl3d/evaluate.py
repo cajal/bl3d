@@ -256,8 +256,8 @@ class InstanceMetrics(dj.Computed):
             net.eval()
 
             # Set some parameters
-            num_thresholds = 11
-            thresholds = np.linspace(0.75, 0.95, num_thresholds)
+            num_thresholds = 13
+            thresholds = np.linspace(0.75, 0.99, num_thresholds)
             acceptance_ious = np.arange(0.5, 1, 0.05)
             num_ious = len(acceptance_ious)
 
