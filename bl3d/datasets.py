@@ -17,9 +17,9 @@ class DetectionDataset(Dataset):
         transform (callable): Transform to apply to the example: receives a (volume,
             label, centroids) triplet and returns a triplet with the transformed example.
             All elements are numpy arrays.
+        normalize_volume (bool): Whether to local contrast normalize the input.
         centroid_radius (int): Number of dilations to apply to a single point to produce a
             centroid mask. k will result in a 3-d disk of (2*k + 1) diameter.
-        normalize_volume (bool): Whether to local contrast normalize the input.
         binarize_labels (bool): Whether labels would be binary or each cell will have a
             diff id.
 
@@ -31,8 +31,8 @@ class DetectionDataset(Dataset):
             centroids (uint8 array): A d x h x w array: centroids of all cells.
     """
 
-    def __init__(self, examples, transform=None, centroid_radius=2,
-                 normalize_volume=True, binarize_labels=True):
+    def __init__(self, examples, transform=None, normalize_volume=True, centroid_radius=2,
+                 binarize_labels=True):
         print('Creating dataset with {}normalized examples {} and centroid radius {}'.format(
                 '' if normalize_volume else 'un', examples, centroid_radius))
 
