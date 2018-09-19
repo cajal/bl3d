@@ -143,11 +143,13 @@ class QCANet(dj.Computed):
 
                 # Compute loss
                 ndn_loss = F.binary_cross_entropy_with_logits(detection[:, 0],
-                                                              centroids.float(),
-                                                              pos_weight=train_params['ndn_pos_weight'])
+                    (torch.clamp(centroids.float(), 0.05, 0.95) if
+                     train_params['soften_label'] else centroids.float()),
+                    pos_weight=train_params['ndn_pos_weight'])
                 nsn_loss = F.binary_cross_entropy_with_logits(segmentation[:, 0],
-                                                              label.float(),
-                                                              pos_weight=train_params['nsn_pos_weight'])
+                    (torch.clamp(label.float(), 0.05, 0.95) if
+                     train_params['soften_label'] else label.float()),
+                    pos_weight=train_params['nsn_pos_weight'])
                 loss = ndn_loss + train_params['nsn_loss_weight'] * nsn_loss
 
                 # Check for divergence

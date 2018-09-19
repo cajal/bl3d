@@ -13,7 +13,8 @@ class TrainingParams(dj.Lookup):
     ---
     seed:               int             # random seed for torch/np      
     normalize_volume:   boolean         # whether to local contrast normalize the stacks
-    centroid_radius:    int             # radius of the centroids to predict 
+    centroid_radius:    int             # radius of the centroids to predict
+    soften_label:       boolean         # whether to use soft labels (0.05/0.95) during training
     train_crop_size:    int             # size of the crops used during training
     val_crop_size:      int             # size of the random crops used for validation
     learning_rate:      float           # initial learning rate for SGD
@@ -38,13 +39,22 @@ class TrainingParams(dj.Lookup):
             in itertools.product([0.01, 0.1], [0, 0.0001, 0.01], [0.1, 1, 10], [300],
                                  [10]):
             yield {'training_id': id_, 'seed': 1234, 'normalize_volume': True,
-                   'centroid_radius': 2, 'train_crop_size': 128, 'val_crop_size': 192,
-                   'learning_rate': learning_rate, 'momentum': 0.9,
+                   'soften_label': False, 'centroid_radius': 2, 'train_crop_size': 128,
+                   'val_crop_size': 192, 'learning_rate': learning_rate, 'momentum': 0.9,
                    'weight_decay': weight_decay, 'lr_decay': 0.1, 'num_epochs': 150,
                    'val_epochs': 1, 'decay_epochs': 10, 'ndn_pos_weight': ndn_pos_weight,
                    'nsn_pos_weight': nsn_pos_weight, 'nsn_loss_weight': nsn_loss_weight,
                    'ndn_threshold': 99.7, 'nsn_threshold': 91}
             id_ += 1
+
+        # Test soft labels
+        yield {'training_id': id_, 'seed': 1234, 'normalize_volume': True,
+               'soften_label': True, 'centroid_radius': 2, 'train_crop_size': 128,
+               'val_crop_size': 192, 'learning_rate': 0.01, 'momentum': 0.9,
+               'weight_decay': 0, 'lr_decay': 0.1, 'num_epochs': 150, 'val_epochs': 1,
+               'decay_epochs': 10, 'ndn_pos_weight': 300, 'nsn_pos_weight': 10,
+               'nsn_loss_weight': 1, 'ndn_threshold': 99.7, 'nsn_threshold': 91}
+        id_ += 1
 
 
 @schema
