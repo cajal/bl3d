@@ -115,7 +115,7 @@ def prob2labels(detection, segmentation_, seg_threshold=0.5, min_voxels=65,
     Arguments:
         detection (np.array): 3-d probability heatmap.
         segmentation (np.array): 3-d probability heatmap.
-        threshold (np.array): Threshold for the segmentation heatmap.
+        seg_threshold (float): Threshold for the segmentation heatmap.
         min_voxels (int): Minimum number of voxels a final mask would have.
         max_voxels (int): Maximum number of voxels a final mask would have
 
