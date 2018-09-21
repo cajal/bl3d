@@ -107,41 +107,4 @@ def sharpen_2pimage(image, laplace_sigma=0.7, low_percentile=3, high_percentile=
 
     return norm
 
-
-def prob2labels(detection, segmentation_, seg_threshold=0.5, min_voxels=65,
-                max_voxels=4589):
-    """ Create instance segmentations using centroid predictions and cell segmentations.
-
-    Arguments:
-        detection (np.array): 3-d probability heatmap.
-        segmentation (np.array): 3-d probability heatmap.
-        seg_threshold (float): Threshold for the segmentation heatmap.
-        min_voxels (int): Minimum number of voxels a final mask would have.
-        max_voxels (int): Maximum number of voxels a final mask would have
-
-    Returns:
-        label: Array with same shape as segmentation with zero for background and positive
-            integer ids for each predicted instance.
-    """
-    from skimage import feature, morphology, measure, segmentation
-
-    # Create binary segmentation
-    binary_masks = segmentation_ > seg_threshold
-
-    # Watershed segmentation using centroids from detection
-    peaks = feature.peak_local_max(detection, footprint=morphology.ball(4), indices=False,
-                                   exclude_border=False)
-    peaks[~binary_masks] = 0 # restrict to peaks in cell bodies
-    markers = morphology.label(peaks)
-    masks = morphology.watershed(-segmentation_, markers, mask=binary_masks,
-                                 connectivity=3, compactness=0.05)
-    print(masks.max(), 'initial cells')
-
-    # Remove masks that are too small or too big (usually bad detections)
-    mask_sizes = np.bincount(masks.ravel())
-    to_keep = np.logical_and(mask_sizes >= min_voxels, mask_sizes <= max_voxels)
-    masks[~to_keep[masks]] = 0  # set to background
-    label, _, _ = segmentation.relabel_sequential(masks)
-    print(label.max(), 'final cells')
-
-    return label
+# TODO: Function that receives a probability map and centroids and returns predictions.
