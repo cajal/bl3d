@@ -56,7 +56,6 @@ class PreprocessingParams(dj.Lookup):
         [17259, 7, 10, 1, 1, (14, -15, 5, -5, 11, -5), 3, 0.07, 65, 2145],
     ]
 
-
 @schema
 class Stack(dj.Computed):
     definition = """ # a single stack with 3-d green and red structural recordings

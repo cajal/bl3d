@@ -1,7 +1,8 @@
-version: '2'
+version: '2.3'
 services:
   bash:
     image: ecobost/bl3d
+    runtime: nvidia
     volumes:
       - .:/src/bl3d/
       - /tmp/:/tmp/
@@ -16,6 +17,7 @@ services:
 
   notebook:
     image: ecobost/bl3d
+    runtime: nvidia
     ports:
       - "8888:8888"
     volumes:
