@@ -181,7 +181,7 @@ class QCANet(nn.Module):
 
         return detection, segmentation
 
-    def forward_on_big_input(self, input_, block_size=160):
+    def forward_on_big_input(self, input_, block_size=192):
         """ Forwards a volume through the network dividing it in chunks. Non-
         differentiable.
 
@@ -189,14 +189,16 @@ class QCANet(nn.Module):
             input_ (torch.tensor): Input to the network (num_examples x num_channels x d1
                 x d2 x ...).
             block_size (int): Size of the chunks to send through the networks. Same size
-                in all dimensions.
+                in all dimensions. Default fits in 11 GB of memory.
 
         Returns:
             detection, segmentation: Two heatmaps of logits in CPU. Same size as input.
 
         Note:
-            Assumes net and volume are in the same device (usually both in GPU). If net is
-            in train mode, each chunk will be batch normalized with diff parameters.
+            Moves each small chunk to net.device sequentially. We recommend having the
+            network in GPU and the input in CPU to save GPU space (big inputs could be
+            5-10 GB). If net is in train mode, each chunk will be batch normalized with
+            diff parameters.
         """
         import itertools
 
@@ -212,7 +214,8 @@ class QCANet(nn.Module):
             chunk = input_[(..., *cut_slices)]
 
             # Forward
-            chunk_detection, chunk_segmentation = self.forward(chunk)
+            net_device = self.core.conv1.weight.device
+            chunk_detection, chunk_segmentation = self.forward(chunk.to(net_device))
 
             # Assign to output dropping padded amount (special treatment for first chunk)
             full_slices = [slice(0 if sl.start == 0 else sl.start + padding, sl.stop)
