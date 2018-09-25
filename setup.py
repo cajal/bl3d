@@ -3,7 +3,7 @@ from setuptools import setup
 
 setup(
     name='bl3d',
-    version='0.3.0',
+    version='0.4.0',
     description='Cell segmentation in 3D GCaMP structural recordings',
     author='Erick Cobos',
     author_email='ecobos@bcm.edu',
