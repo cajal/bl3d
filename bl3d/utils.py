@@ -109,7 +109,7 @@ def sharpen_2pimage(image, laplace_sigma=0.7, low_percentile=3, high_percentile=
 
 
 def prob2labels(detection, segmentation_, seg_threshold=0.5, min_voxels=65,
-                max_voxels=4589):
+                max_voxels=4186, compactness_factor=0.05):
     """ Create instance segmentations using centroid predictions and cell segmentations.
 
     Arguments:
@@ -118,6 +118,8 @@ def prob2labels(detection, segmentation_, seg_threshold=0.5, min_voxels=65,
         seg_threshold (float): Threshold for the segmentation heatmap.
         min_voxels (int): Minimum number of voxels a final mask would have.
         max_voxels (int): Maximum number of voxels a final mask would have
+        compactness_factor (float): Factor used for the compactness in watershed. Higher value
+            biases segmentations into more spherical masks.
 
     Returns:
         label: Array with same shape as segmentation with zero for background and positive
@@ -134,7 +136,7 @@ def prob2labels(detection, segmentation_, seg_threshold=0.5, min_voxels=65,
     peaks[~binary_masks] = 0 # restrict to peaks in cell bodies
     markers = morphology.label(peaks)
     masks = morphology.watershed(-segmentation_, markers, mask=binary_masks,
-                                 connectivity=3, compactness=0.05)
+                                 connectivity=3, compactness=compactness_factor)
     print(masks.max(), 'initial cells')
 
     # Remove masks that are too small or too big (usually bad detections)
