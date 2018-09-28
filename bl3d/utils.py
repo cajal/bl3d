@@ -133,10 +133,10 @@ def prob2labels(detection, segmentation_, seg_threshold=0.5, min_voxels=65,
     # Watershed segmentation using centroids from detection
     peaks = feature.peak_local_max(detection, footprint=morphology.ball(4), indices=False,
                                    exclude_border=False)
-    peaks[~binary_masks] = 0 # restrict to peaks in cell bodies
-    markers = morphology.label(peaks)
-    masks = morphology.watershed(-segmentation_, markers, mask=binary_masks,
-                                 connectivity=3, compactness=compactness_factor)
+    peaks[~binary_masks] = False # restrict to peaks in cell bodies
+    masks = morphology.watershed(-segmentation_, morphology.label(peaks).astype(np.int32),
+                                 mask=binary_masks, connectivity=3,
+                                 compactness=compactness_factor)
     print(masks.max(), 'initial cells')
 
     # Remove masks that are too small or too big (usually bad detections)
