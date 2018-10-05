@@ -101,7 +101,7 @@ class SemanticMetrics(dj.Computed):
             for volume, label, centroids in dataloader:
                 # Get predictions
                 with torch.no_grad():
-                    detection, segmentation = net.forward_on_big_input(volume.cuda())
+                    detection, segmentation = net.forward_on_big_input(volume)
                     detection = torch.sigmoid(detection).squeeze().numpy()
                     segmentation = torch.sigmoid(segmentation).squeeze().numpy()
 
@@ -270,7 +270,7 @@ class InstanceMetrics(dj.Computed):
             for volume, label, centroids in dataloader:
                 # Get predictions
                 with torch.no_grad():
-                    detection, segmentation = net.forward_on_big_input(volume.cuda())
+                    detection, segmentation = net.forward_on_big_input(volume)
                     detection = torch.sigmoid(detection).squeeze().numpy()
                     segmentation = torch.sigmoid(segmentation).squeeze().numpy()
                     label = label[0].numpy()
