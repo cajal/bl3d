@@ -181,7 +181,7 @@ class QCANet(nn.Module):
 
         return detection, segmentation
 
-    def forward_on_big_input(self, input_, block_size=192):
+    def forward_on_big_input(self, input_, block_size=160):
         """ Forwards a volume through the network dividing it in chunks. Non-
         differentiable.
 
